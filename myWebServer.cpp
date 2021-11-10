@@ -128,7 +128,7 @@ static const char *getUniqueUUID()
     // the name of the device is serialized by the mac address
     // and implies the kind of thing at this time.
     static char uuid[40];
-    sprintf(uuid,"%s_%s",BASE_UUID,getUniqueHexId());
+    sprintf(uuid,"%s%s",BASE_UUID,getUniqueHexId());
     return uuid;
 }
 
