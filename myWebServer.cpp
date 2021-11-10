@@ -1,8 +1,45 @@
 //--------------------------
 // myWebServer.cpp
 //--------------------------
-// SSDP did not work.
-// Captive Portal is wonky.
+// Captive Portal 
+//
+//    The Captive Portal is a bit wonky.
+//    My general idea is that you will only use the Access Point to set the SSID and password of the 
+//    local net you wanna connect to, and that the ESP32 will fall back to AP mode only if that fails.
+//    However, it might also have a button or UI on the ESP32 thing that says "forget the Station stuff"
+//    so that you can trigger an old device to NOT connect to a WiFi network that happens to be available,
+//    but which is not desired, so it will fall back to the AP so you can reconfigure it ... although
+//    theoretically in that case you could just connect to the other wifi net, and presumably the general
+//    "thing" web ui would have a way to "forget" the station info and/or select another wifi network.
+//
+//    One way or the other I do not see the "outside world" connectng to the AP mode, and it wouldn't
+//    be a very friendly API if you had to explicitly connect to the AP to use the device.
+//
+//    So, basically, it assumes you will have a wifi router available to the thing and it will
+//    be completely unprotected HTTP.
+//
+// SSDP
+//
+//    This thing advertises itself as an "urn:myIOT:device" instead of a upnp:root_device.
+//    Might be able to do away with the "urn:" portion.
+//    My idea is that this is a general simple http only WebServer for my IOT devices.
+//    These devices are visible on the local network, but it presumed that, for protection, no hole is 
+//    poked in the router for port 80 (http)
+//    
+//    They can each serve their own little webpages as well as supporting some kind of a consistent JSON API.
+//    There will be an rPI that acts as an aggregator, and uses SSDP to discover all my IOT things on the localnet,
+//    and will present a consolidated view of all of them through a webserver in C++.
+//    
+//    It is possible that the rPi application will be a real windowed app on Debian, so that we can take
+//    over the HDMI screen, but it would probably be ok if it was a console app webserver and we just opened
+//    a browser to the page.
+//
+// nGrok
+//
+//    Furthermore it is the idea that we will use nGrok to provide a world-visible url to the RPi.
+//    Therefore the rPI webserver MUST support HTTPS and authentication of some sort, as we cannot
+//    rely on nGrok to provide any protection (over url hiding) of the endpoint.
+
 
 
 #include "myWebServer.h"
@@ -30,6 +67,9 @@
 #define PORT  80
 #define DNS_PORT   53
 #define WIFI_CONNECT_TIMEOUT    5000
+
+#define BASE_NAME "bilgeAlarm"
+#define BASE_UUID "38323636-4558-4dda-9188-cda0e6"
 
 const char *ap_ip = "192.168.1.254";
 const char *ap_subnet_mask = "255.255.255.0";
@@ -69,6 +109,38 @@ long              myWebServer::_id_connection = 0;
 UploadStatusType  myWebServer::_upload_status = UploadStatusType::NONE;
 WebServer*        myWebServer::_webserver     = NULL;
 WebSocketsServer* myWebServer::_socket_server = NULL;
+
+static const char *getUniqueHexId()
+    // returns 6 character unique id based on mac address
+{
+    static char id[7];
+    uint32_t chipId = (uint16_t)(ESP.getEfuseMac() >> 32);
+    sprintf(id,"%02x%02x%02x",  
+        (uint16_t)((chipId >> 16) & 0xff),
+        (uint16_t)((chipId >> 8) & 0xff),
+        (uint16_t)chipId & 0xff);
+    return id;
+}
+
+
+static const char *getUniqueUUID()
+{
+    // the name of the device is serialized by the mac address
+    // and implies the kind of thing at this time.
+    static char uuid[40];
+    sprintf(uuid,"%s_%s",BASE_UUID,getUniqueHexId());
+    return uuid;
+}
+
+
+static const char *getUniqueDeviceName()
+{
+    // the name of the device is serialized by the mac address
+    // and implies the kind of thing at this time.
+    static char name[40];
+    sprintf(name,"%s_%s",BASE_NAME,getUniqueHexId());
+    return name;
+}
 
 
 void init_WiFi()
@@ -203,6 +275,7 @@ bool myWebServer::begin()
     if (WiFi.getMode() == WIFI_AP)
     {
         // all domains * redirected to the softAPIP() address
+        // the dns server is required to kick off the "Captive Portal" behavior
         dns_server.start(DNS_PORT, "*", WiFi.softAPIP());
         display(0,"Captive Portal Started",0);
         _webserver->on("/generate_204", HTTP_ANY, handle_root);
@@ -215,13 +288,37 @@ bool myWebServer::begin()
         if (WiFi.getMode() == WIFI_STA)
         {
             _webserver->on("/description.xml", HTTP_GET, handle_SSDP);
+                // description.xml IS served to regular clients (i.e. Win10)
+                // so they can get the url of the local thing http server.
+                // It is not clear if it is used by my IOT layers.
 
             SSDP.setSchemaURL("description.xml");
             SSDP.setHTTPPort(_port);
-            SSDP.setName("bilgeAlarm2");     // wifi_config.Hostname());
             SSDP.setURL("/");
-            SSDP.setDeviceType("upnp:rootdevice");
 
+            SSDP.setServerName("myIOTServer/1.0");
+                // my own made up IOT server name
+            SSDP.setDeviceType("urn:myIOT:device");  // "upnp:rootdevice"
+                // my own made up device type; the "urn:" may not be necessary
+                    
+            SSDP.setUUID(getUniqueUUID());
+            SSDP.setName(getUniqueDeviceName());
+                // my serialized uuid and name
+                
+            #if 0
+                // Thus far we have not gotten to where a service descriptor is useful
+                SSDP.setServices(  "<service>"
+                   "<serviceType>urn:schemas-upnp-org:service:SwitchPower:1</serviceType>"
+                   "<serviceId>urn:upnp-org:serviceId:SwitchPower:1</serviceId>"
+                   "<SCPDURL>/SwitchPower1.xml</SCPDURL>"
+                   "<controlURL>/SwitchPower/Control</controlURL>"
+                   "<eventSubURL>/SwitchPower/Event</eventSubURL>"
+                   "</service>");
+            #endif    
+
+            // other things that can be set via API, but which
+            // are not that useful and are also probably in description.xml
+            
             // SSDP.setModelName (ESP32_MODEL_NAME);
             // SSDP.setModelURL (ESP32_MODEL_URL);
             // SSDP.setModelNumber (ESP_MODEL_NUMBER);
@@ -371,6 +468,7 @@ void myWebServer::handle_not_found()
         content.replace(KEY_QUERY, _webserver->uri());
         content.replace("$COUNT$",String(count++));
 
+        // various other (not working) strategies for Captive Portal redirection
         // _webserver->sendHeader("Location", "http://bilgeAlarm.local/index.html");
         // _webserver->sendHeader("Location", "/index.html");
         // _webserver->send(302, "text/plain","");
@@ -398,12 +496,14 @@ void myWebServer::handle_not_found()
                 "</specVersion>"
                 "<URLBase>http://%s:%u/</URLBase>"
                 "<device>"
-                "<deviceType>upnp:rootdevice</deviceType>"
-                "<friendlyName>bilgeAlarm</friendlyName>"
+                
+                // "<deviceType>upnp:rootdevice</deviceType>"
+                "<deviceType>urn:myIOT:device</deviceType>"
+                "<friendlyName>%s</friendlyName>"
                 "<presentationURL>/</presentationURL>"
                 "<serialNumber>%s</serialNumber>"
                 "<modelName>bilgeAlarm</modelName>"
-                "<modelNumber>Model 1</modelNumber>"
+                "<modelNumber>Model 3</modelNumber>"
                 "<modelURL>https://github.com/phorton1/Arduino-bilgePumpSwitch</modelURL>"
                 "<manufacturer>prhSystems</manufacturer>"
                 "<manufacturerURL>http://phorton.com</manufacturerURL>"
@@ -411,22 +511,13 @@ void myWebServer::handle_not_found()
                 "</device>"
                 "</root>\r\n"
                 "\r\n";
-            char     uuid[37];
-            String   sip    = WiFi.localIP().toString();
-            uint32_t chipId = (uint16_t)(ESP.getEfuseMac() >> 32);
-            sprintf(uuid,
-             // "38323636-4558-4dda-9188-cda0e6%02x%02x%02x",
-                "711e744c-72c1-41bc-8b52-e32179%%02x%02x%02x",      // "b41a4b"
-                (uint16_t)((chipId >> 16) & 0xff),
-                (uint16_t)((chipId >> 8) & 0xff),
-                (uint16_t)chipId & 0xff);
-            String serialNumber = String(chipId);
-
+            
             sschema.printf(templ.c_str(),
-                sip.c_str(),
-                _port,
-                serialNumber.c_str(),
-                uuid);
+                WiFi.localIP().toString().c_str(),                      // ip
+                _port,                                                  // port
+                getUniqueDeviceName(),                                  // friendlyName
+                String((uint16_t)(ESP.getEfuseMac() >> 32)).c_str(),    // serial number
+                getUniqueUUID());                                       // uuid
 
             _webserver->send(200, "text/xml", (String)sschema);
         }
