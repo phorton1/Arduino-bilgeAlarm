@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>Captive Portal</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+
+<style>
+    .hidden {
+        display:none;
+    }
+    .shown {
+        display:block;
+    }
+
+    body {
+        font-family:'Arial',sans-serif;
+        font-weight:bold;
+        margin-left: 20px;
+    }
+    .link_button   {
+        background-color: #e4685d;
+        border: none;
+        box-shadow: 0 1px 8px 0 rgba(0,0,0,0.2), 0 6px 20px 0 rgba(0,0,0,0.19);
+        -moz-border-radius:4px;
+        -webkit-border-radius:4px;
+        border-radius:4px;
+        color: white;
+        padding: 10px 30px;
+        text-decoration: none;
+        display: inline-block;
+        font-size: 120%;
+        margin-top:24px;
+      }
+    .link_button:active {
+        position:relative;
+        top:2px;
+        box-shadow: 0 0 0 0 rgba(0,0,0,0.2), 0 0 0 0 rgba(0,0,0,0.19);
+    }
+    .ssid_list {
+        line-height: 20px;
+        margin-bottom: 4px;
+        vertical-align: middle;
+    }
+    .ssid_list > a {
+        width: 160px;
+        display: inline-block;
+        position: relative;
+        padding: 0.25em 1.0em;
+        margin-right: 1.0em;
+        text-align: center;
+        text-decoration: none;
+        color: #FFF;
+        background-color: #006778;
+        background-image: -webkit-linear-gradient(top, #0087b0, #006778);
+        background-image: linear-gradient(to bottom, #0087b0, #006778);
+        border-bottom: solid 3px #004462;
+        border-radius: 4px;
+        box-shadow: inset 0 1px 0 rgba(255,255,255,0.2), 0 3px 2px rgba(0, 0, 0, 0.19);
+    }
+    .ssid_list > a:active {
+        border-bottom: solid 3px #006778;
+        box-shadow: 0 0 1px rgba(0, 0, 0, 0.2);
+    }
+    .img_lock {
+        display: inline-block;
+        width: 32px;
+        height:32px;
+        margin-left: 0.5em;
+        vertical-align: middle;
+        background: url(data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAACXBIWXMAAAsTAAALEwEAmpwYAAACZElEQVRYhe2VTUhUURTHf2emSaiNUi4KtKACTQgcJ8rJpC+CIMiF9uGmVViCU9kHRC3cRFCQqWiFEgR9QW2KVi1KKsescYRo1RdFSwuNCLNp3mkxd8DCeXNt5uGmPxzefeede87vnXvvezDLkplOqOl5WeQkEg0iBFW0BEBUPqkS9wUCt582rxrzBGBD+0jhT3/yLLAXYRSVh6AfTZoliG5CKQauzk36j/cfrhzPG0D4QrwWn3ML+KIqxwbHgg9oE+ePoDb1VRfFt4roOWABjm939FDwcc4A6zpiG1W4D1ycLODEcFMokX62vjNeDPAkEhxN+6ouxwIFk5wBDoiyfeBg6JFb/jnZABxkpQjt0ZaqUwBr20eW+vzJk0B9EqcQINwZGwfuOEn/6WdNlR+Ao+Gu4R8qWg64AsxoE1Z3vtgD0iswpMIlfDKSotRKUfYrrAHdNxhZfdM2pzVAdffwcknqK4TWaEuoZ7qYcFesGeU8UBGNhN7Z5rZWTUesdMptOdAA7AIq0s7a7ucleS/8l8qBIUCBr8C4GQ+ZZ56qHpgArptiYmyF8U0AO70qvhgYA1pdYo6YmEVeANwgdaTcNq4A/cC1fBcPAN+BRovYRuAbFt+YmaiU1EYrs4gtM7FWp8FnCTDPXD9bxKZj5lvmdlUfqbfJxfrcCmTrgP47u51sl2DWALJ14L0xzwAyKQHsAJYZqwN+eQGQqQNXgHtT7u8aX94BMum1pS9ngEwd2DKNb7MXAJm0jdS6p1VnfHkHcDsFCzOM8wrgubL9sdw60GssJ/3/FGdbgrfAQI413uQ431v9Bn8ZuSAzPe5xAAAAAElFTkSuQmCC) no-repeat;
+    }
+
+
+    .form-style {
+        max-width: 400px;
+        margin: 10px auto;
+        padding: 16px;
+    }
+    .form-style h1{
+        background: #006778;
+        border-radius:4px;
+        padding: 16px 0;
+        font-size: 140%;
+        font-weight: 300;
+        text-align: center;
+        text-shadow:0px 1px 0px #002778;
+        color: #fff;
+        margin: -16px -16px 16px -16px;
+    }
+    .form-style input[type="password"],
+    .form-style input[type="text"],
+    .form-style textarea,
+    .form-style select
+    {
+        -webkit-transition: all 0.30s ease-in-out;
+        -moz-transition: all 0.30s ease-in-out;
+        -ms-transition: all 0.30s ease-in-out;
+        outline: none;
+        box-sizing: border-box;
+        -webkit-box-sizing: border-box;
+        -moz-box-sizing: border-box;
+        width: 100%;
+        background: #fff;
+        margin-bottom: 4%;
+        border: 1px solid #ccc;
+        padding: 3%;
+        color: #555;
+        font-size: 100%;
+    }
+    .form-style input[type="password"]:focus,
+    .form-style input[type="text"]:focus,
+    .form-style textarea:focus,
+    .form-style select:focus
+    {
+        box-shadow: 0 0 5px #276873;
+        padding: 3%;
+        border: 2px solid #276873;
+    }
+    .form-style input[type="submit"]
+    {
+        background-color: #e4685d;
+        border: none;
+        box-shadow: 0 1px 8px 0 rgba(0,0,0,0.2), 0 6px 20px 0 rgba(0,0,0,0.19);
+        -moz-border-radius:4px;
+        -webkit-border-radius:4px;
+        border-radius:4px;
+        color: white;
+        padding: 10px 30px;
+        text-decoration: none;
+        display: block;
+        font-size: 120%;
+        margin-top:24px;
+    }
+    .form-style input[type="submit"]:active
+    {
+        position:relative;
+        top:2px;
+        box-shadow: 0 0 0 0 rgba(0,0,0,0.2), 0 0 0 0 rgba(0,0,0,0.19);
+    }
+</style>
+
+<script type="text/javascript">
+
+    var xmlhttp;
+    var device_name;
+
+
+    function showState(show_state)
+    {
+        document.getElementById('networks').classList.remove('shown');
+        document.getElementById('scanning').classList.remove('shown');
+        document.getElementById('entry_form').classList.remove('shown');
+        document.getElementById('join_button').classList.remove('shown');
+        document.getElementById('connecting').classList.remove('shown');
+        document.getElementById('connected').classList.remove('shown');
+
+        if (show_state == 4)
+        {
+            document.getElementById('connected').classList.add('shown');
+        }
+        else if (show_state == 3)
+        {
+            document.getElementById('entry_form').classList.add('shown');
+            document.getElementById('connecting').classList.add('shown');
+        }
+        else if (show_state == 2)
+        {
+            document.getElementById('entry_form').classList.add('shown');
+            document.getElementById('join_button').classList.add('shown');
+        }
+        else if (show_state == 1)
+            document.getElementById('networks').classList.add('shown');
+        else    // join_state == 0
+            document.getElementById('scanning').classList.add('shown');
+    }
+    function joinNetwork()
+    {
+        showState(3);
+        ssid = document.getElementById('entry_ssid').value;
+        psk = document.getElementById('entry_psk').value;
+        // alert("joinNetwork(" + ssid + "," + psk + ")");
+        xmlhttp = new XMLHttpRequest();
+        xmlhttp.onreadystatechange = function()
+        {
+            if (this.readyState == 4 && this.status == 200)
+            {
+                // alert("back from join_network response=" +  this.responseText);
+                if (this.responseText == "OK")
+                {
+                    showState(4);
+                    alert("Connection to " + ssid + " was succesful.\nCaptive Portal Access Point will be closed.");
+                }
+                else
+                {
+                    alert("There was a problem connecting to " + ssid + ".\nPlease try again  ..");
+                    showState(1);
+                }
+            }
+        };
+        var url = '/join_network?ssid=' + ssid + '&psk=' + psk;
+        xmlhttp.open("GET", url, true);
+        xmlhttp.send();
+    }
+
+    function networkEntry(ssid,psktype)
+    {
+        // alert("networkEntry(" + ssid + "," + psktype + ")");
+        document.getElementById('entry_ssid').readonly = false;
+        document.getElementById('entry_ssid').value = ssid;
+        document.getElementById('entry_psk').value = "";
+        document.getElementById('entry_psk_section').classList.remove('shown');
+        if (ssid)
+            document.getElementById('entry_ssid').readonly = true;
+        if (psktype != 0)
+            document.getElementById('entry_psk_section').classList.add('shown');
+        showState(2);
+    }
+    function refreshNetList()
+    {
+        showState(0);
+        xmlhttp = new XMLHttpRequest();
+        xmlhttp.onreadystatechange = function()
+        {
+            if (this.readyState == 4 && this.status == 200)
+            {
+                document.getElementById('network_list').innerHTML = this.responseText;
+                showState(1);
+            }
+        };
+        var url = '/get_network_list';
+        xmlhttp.open("GET", url, true);
+        xmlhttp.send();
+    }
+
+
+    function startCaptive()
+    {
+        showState(0);
+        xmlhttp = new XMLHttpRequest();
+        xmlhttp.onreadystatechange = function()
+        {
+            if (this.readyState == 4 && this.status == 200)
+            {
+                device_name = this.responseText;
+                document.title = device_name;
+                document.getElementById('select_device_name').innerHTML = device_name;
+                refreshNetList();
+            }
+        };
+        var url = '/get_device_name';
+        xmlhttp.open("GET", url, true);
+        xmlhttp.send();
+    }
+
+    window.onload = startCaptive;
+</script>
+</head>
+
+<body>
+<div id="scanning" class="hidden">
+    <br>
+    <h2>Scanning Wifi Networks</h2>
+    <progress/>
+</div>
+<div id="networks" class="hidden">
+    <br>
+    <h2>Select Wifi Network for <span id='select_device_name'>this device</span></h2>
+    <div id="network_list">
+        the network list
+    </div>
+    <p><a href="javascript:refreshNetList()" class="link_button">Rescan</a></p>
+</div>
+<div id='entry_form' class="form-style hidden">
+    <form action='/join_network' method='get'>
+        <h1>Connect to Wifi Network</h1>
+        SSID: <input id="entry_ssid" type="text" name="ssid"/>
+        <div class='hidden' id="entry_psk_section">
+            PASS: <input id="entry_psk" type="password" name="psk"/>
+        </div>
+        <!-- p><input type="submit" value="Join"/></p-->
+        <p id="join_button" class="hidden"><a href="javascript:joinNetwork()" class="link_button">Join</a></p>
+        <div id="connecting" class='hidden'><h2>Connecting <progress/></h2></div>
+    </form>
+</div>
+<div id='connected' class='hidden'>
+    <br><br>
+    <h2>Connected.  You may close this window</h2>
+    <br>
+</div>
+</body>
+</html>
