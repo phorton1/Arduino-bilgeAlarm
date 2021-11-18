@@ -142,11 +142,59 @@
 <script type="text/javascript">
 
     var xmlhttp;
+    var xmlhttp2;
+
+    var show_state = -1;
+
     var device_name;
+    var connect_ssid;
+
+    var interval1;
+    var interval2;
+    var interval3;
+
+    var http_uri = "";
+    var http_message;
+    var http_ready_state = 0;
+    var http_progress = 0;
+    var iot_check_counter = 0;
+    var request_timer = 0;
 
 
-    function showState(show_state)
+    function makeHTTPRequest(url,fxn)
     {
+        http_message = "";
+        http_ready_state = 0;
+        http_progress = 0;
+        http_uri = url;
+
+        xmlhttp = new XMLHttpRequest();
+        xmlhttp.onload = fxn;
+        xmlhttp.onabort = function() { http_message += "abort "; };
+        xmlhttp.onerror = function() { http_message += "error "; };
+        xmlhttp.ontimeout = function() { http_message += "timeout "; };
+        xmlhttp.onprogress = function() { http_progress++; };
+
+        xmlhttp.onreadystatechange = function() {
+            http_ready_state = this.readyState;
+            if (this.readyState == 4)
+                http_message += " status(" + this.status + ":" + this.statusText + ") ";
+        };
+
+        xmlhttp.open("GET", url, true);
+        xmlhttp.send();
+    }
+
+    //--------------------------------------
+    // state machine
+    //---------------------------------------
+
+    function showState(state)
+    {
+        show_state = state;
+
+        console.log("showState(" + state + ")");
+
         document.getElementById('networks').classList.remove('shown');
         document.getElementById('scanning').classList.remove('shown');
         document.getElementById('entry_form').classList.remove('shown');
@@ -154,56 +202,77 @@
         document.getElementById('connecting').classList.remove('shown');
         document.getElementById('connected').classList.remove('shown');
 
-        if (show_state == 4)
+        if (state == 4)
         {
             document.getElementById('connected').classList.add('shown');
+            document.getElementById('device_name').innerHTML = device_name;
+            document.getElementById('connected_ssid').innerHTML = connect_ssid;
         }
-        else if (show_state == 3)
+        else if (state == 3)
         {
             document.getElementById('entry_form').classList.add('shown');
             document.getElementById('connecting').classList.add('shown');
+            document.getElementById('prog2').value = 0;
         }
-        else if (show_state == 2)
+        else if (state == 2)
         {
             document.getElementById('entry_form').classList.add('shown');
             document.getElementById('join_button').classList.add('shown');
         }
-        else if (show_state == 1)
+        else if (state == 1)
             document.getElementById('networks').classList.add('shown');
-        else    // join_state == 0
+        else    // state == 0
+        {
             document.getElementById('scanning').classList.add('shown');
+            document.getElementById('prog1').value = 0;
+        }
     }
+
+
     function joinNetwork()
     {
+        // called from entry buttons
         showState(3);
-        ssid = document.getElementById('entry_ssid').value;
+        connect_ssid = document.getElementById('entry_ssid').value;
         psk = document.getElementById('entry_psk').value;
         // alert("joinNetwork(" + ssid + "," + psk + ")");
-        xmlhttp = new XMLHttpRequest();
-        xmlhttp.onreadystatechange = function()
+
+        var url = 'captive?cmd=join_network&ssid=' + connect_ssid + '&psk=' + psk;
+
+        makeHTTPRequest(url,function()
         {
-            if (this.readyState == 4 && this.status == 200)
+            // we often don't get this because in AP mode, apparently
+            // because starting the station is stopping the AP (even
+            // though we've gone to lengths to use WIFI_AP_STA mode).
+            //
+            // It works sometimes.
+            //
+            // Of course it cannot work in STA mode because, duh,
+            // we are restarting the station connection ... I don't
+            // now a graceful way to do this ...
+            //
+            // Could poll the server to see if it's "up"
+
+            // if (this.readyState == 4 && this.status == 200)
             {
-                // alert("back from join_network response=" +  this.responseText);
+                console.log("back from join_network response=" +  this.responseText);
                 if (this.responseText == "OK")
                 {
                     showState(4);
-                    alert("Connection to " + ssid + " was succesful.\nCaptive Portal Access Point will be closed.");
+                    alert("Connection to " + connect_ssid + " was succesful.\nCaptive Portal Access Point will be closed.");
                 }
                 else
                 {
-                    alert("There was a problem connecting to " + ssid + ".\nPlease try again  ..");
+                    alert("There was a problem connecting to " + connect_ssid + ".\nPlease try again  ..");
                     showState(1);
                 }
             }
-        };
-        var url = '/join_network?ssid=' + ssid + '&psk=' + psk;
-        xmlhttp.open("GET", url, true);
-        xmlhttp.send();
+        });
     }
 
     function networkEntry(ssid,psktype)
     {
+        // called from buttons in netlist
         // alert("networkEntry(" + ssid + "," + psktype + ")");
         document.getElementById('entry_ssid').readonly = false;
         document.getElementById('entry_ssid').value = ssid;
@@ -215,29 +284,88 @@
             document.getElementById('entry_psk_section').classList.add('shown');
         showState(2);
     }
+
     function refreshNetList()
     {
         showState(0);
-        xmlhttp = new XMLHttpRequest();
-        xmlhttp.onreadystatechange = function()
+        var url = 'captive?cmd=get_network_list';
+        makeHTTPRequest(url,function()
         {
             if (this.readyState == 4 && this.status == 200)
             {
                 document.getElementById('network_list').innerHTML = this.responseText;
                 showState(1);
             }
+        });
+    }
+
+    //--------------------------------------
+    // checkers and status
+    //--------------------------------------
+
+    function checkIOTConnection()
+    {
+        xmlhttp2 = new XMLHttpRequest();
+        xmlhttp2.onload = function()
+        {
+            // if (this.readyState == 4 && this.status == 200)
+            {
+                rslt = this.responseText;
+                // console.log(rslt);
+                if (rslt)
+                    document.getElementById('iot_connection').innerHTML = "(" + iot_check_counter++ + ") " + rslt;
+            }
         };
-        var url = '/get_network_list';
-        xmlhttp.open("GET", url, true);
-        xmlhttp.send();
+        var url = 'captive?cmd=check_connection';
+        xmlhttp2.open("GET", url, true);
+        xmlhttp2.send();
     }
 
 
+    function updateProgress()
+    {
+        var ele;
+        if (show_state == 0)
+            ele = document.getElementById("prog1");
+        else if (show_state == 3)
+            ele = document.getElementById("prog2");
+        if (ele)
+        {
+            var max = parseInt(ele.getAttribute("max"))
+            var i = parseInt(ele.getAttribute("value"));
+            if (i >= max)
+            {
+                i = 0;
+            }
+            ele.setAttribute("value",i+1);
+        }
+    }
+
+    function checkRequest()
+    {
+        document.getElementById("request_status").innerHTML =
+            "(" + (request_timer++) + "," + http_ready_state + "," + http_progress + ") " +
+            http_uri + " : " +
+            http_message;
+        document.getElementById("browser_status").innerHTML =
+            window.navigator.onLine ? "onLine" : "not onLine";
+    }
+
+
+    //--------------------------------------
+    // main
+    //--------------------------------------
+
     function startCaptive()
     {
+        interval1=setInterval(updateProgress,200);
+        interval2=setInterval(checkRequest,200);
+        interval3=setInterval(checkIOTConnection,2000);
+
         showState(0);
-        xmlhttp = new XMLHttpRequest();
-        xmlhttp.onreadystatechange = function()
+        var url = 'captive?cmd=get_device_info';
+
+        if (0)makeHTTPRequest(url,function()
         {
             if (this.readyState == 4 && this.status == 200)
             {
@@ -246,22 +374,31 @@
                 document.getElementById('select_device_name').innerHTML = device_name;
                 refreshNetList();
             }
-        };
-        var url = '/get_device_name';
-        xmlhttp.open("GET", url, true);
-        xmlhttp.send();
+        });
+
     }
 
+
     window.onload = startCaptive;
+
 </script>
 </head>
 
 <body>
+<div id='status'>
+    Browser: <span id='browser_status'>browser_status</span><br>
+    Request: <span id='request_status'>request_status</span><br>
+    IOTConnection: <span id='iot_connection'>iot_connection</span><br>
+</div>
+
+<br><br>
+
 <div id="scanning" class="hidden">
     <br>
     <h2>Scanning Wifi Networks</h2>
-    <progress/>
+    <progress id="prog1" max="50">
 </div>
+
 <div id="networks" class="hidden">
     <br>
     <h2>Select Wifi Network for <span id='select_device_name'>this device</span></h2>
@@ -270,6 +407,7 @@
     </div>
     <p><a href="javascript:refreshNetList()" class="link_button">Rescan</a></p>
 </div>
+
 <div id='entry_form' class="form-style hidden">
     <form action='/join_network' method='get'>
         <h1>Connect to Wifi Network</h1>
@@ -279,13 +417,23 @@
         </div>
         <!-- p><input type="submit" value="Join"/></p-->
         <p id="join_button" class="hidden"><a href="javascript:joinNetwork()" class="link_button">Join</a></p>
-        <div id="connecting" class='hidden'><h2>Connecting <progress/></h2></div>
+        <div id="connecting" class='hidden'><h2>Connecting <progress id="prog2" max="40"/></h2></div>
     </form>
 </div>
+
 <div id='connected' class='hidden'>
     <br><br>
-    <h2>Connected.  You may close this window</h2>
+    <center>
+    <h2>
+        <font color='blue'><span id='device_name'>Device</span></font>
+        is connected to
+        <font color='blue'><span id='connected_ssid'>SSID</span></font>
+        <br>You may close this window
+    </h2>
+    </center>
     <br>
 </div>
+
+
 </body>
 </html>
