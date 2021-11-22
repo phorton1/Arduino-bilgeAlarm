@@ -30,7 +30,7 @@
         display: inline-block;
         font-size: 120%;
         margin-top:24px;
-      }
+    }
     .link_button:active {
         position:relative;
         top:2px;
@@ -147,10 +147,6 @@
     var device_name;
     var connect_ssid;
 
-    var interval1;
-    var interval2;
-    var interval3;
-
     var iot_check_counter = 0;
     var web_socket;
 
@@ -164,36 +160,67 @@
 
         console.log("showState(" + state + ")");
 
-        document.getElementById('networks').classList.remove('shown');
-        document.getElementById('scanning').classList.remove('shown');
-        document.getElementById('entry_form').classList.remove('shown');
+        document.getElementById('ap_pass_form').classList.remove('shown');
+        document.getElementById('set_button').classList.remove('shown');
+        document.getElementById('ssid_form').classList.remove('shown');
         document.getElementById('join_button').classList.remove('shown');
         document.getElementById('connecting').classList.remove('shown');
         document.getElementById('connected').classList.remove('shown');
+
+        // We may or may not get to the final connecte state in AP mode ...
+        // esp if I decide that "Joining" a network amounts to rebooting
+        // the esp32. But for now I allow for the possibility that the
+        // station happens to connect on the same channel as this AP,
+        // and so both can run concurently for some period of time after the
+        // connection request, and the AP can report success
 
         if (state == 4)
         {
             document.getElementById('connected').classList.add('shown');
             document.getElementById('device_name').innerHTML = device_name;
-            document.getElementById('connected_ssid').innerHTML = connect_ssid;
+            document.getElementById('connect_ssid').innerHTML = connect_ssid;
         }
-        else if (state == 3)
-        {
-            document.getElementById('entry_form').classList.add('shown');
-            document.getElementById('connecting').classList.add('shown');
-            document.getElementById('prog2').value = 0;
-        }
+
+
+        // state == 2 - the pressed the Join button, so we hide the button
+        // and put up the progress bar
+
         else if (state == 2)
         {
-            document.getElementById('entry_form').classList.add('shown');
+            document.getElementById('ssid_form').classList.add('shown');
+            document.getElementById('connecting').classList.add('shown');
+            document.getElementById('ssid_progress').value = 0;
+            interval1=setInterval(function ()
+            {
+                var ele = document.getElementById("ssid_progress");
+                var max = parseInt(ele.getAttribute("max"))
+                var i = parseInt(ele.getAttribute("value"));
+                if (i >= max) i = 0;
+                ele.setAttribute("value",i+1);
+            },200);
+        }
+
+        // state == 1 - Station is not connected (or there would be no AP,
+        // and we would not be here in the first place.   Show them the
+        // SSID/PASS page.
+
+        else if (state == 1)
+        {
+            document.getElementById('ssid_form').classList.add('shown');
             document.getElementById('join_button').classList.add('shown');
         }
-        else if (state == 1)
-            document.getElementById('networks').classList.add('shown');
-        else    // state == 0
+
+
+        // state == 0 - AP using default password
+        // show the "set password dialog"
+        // setting the password with JSON *should* respond with
+        // a state change to 1
+
+
+        else
         {
-            document.getElementById('scanning').classList.add('shown');
-            document.getElementById('prog1').value = 0;
+            document.getElementById('ap_pass_form').classList.add('shown');
+            document.getElementById('set_button').classList.add('shown');
         }
     }
 
@@ -201,7 +228,7 @@
     function joinNetwork()
     {
         // called from entry buttons
-        showState(3);
+        showState(2);
         connect_ssid = document.getElementById('entry_ssid').value;
         psk = document.getElementById('entry_psk').value;
         // alert("joinNetwork(" + ssid + "," + psk + ")");
@@ -214,20 +241,11 @@
     }
 
 
-    function networkEntry(ssid,psktype)
+    function setAPPassword()
     {
-        // called from buttons in netlist
-        // alert("networkEntry(" + ssid + "," + psktype + ")");
-        document.getElementById('entry_ssid').readonly = false;
-        document.getElementById('entry_ssid').value = ssid;
-        document.getElementById('entry_psk').value = "";
-        document.getElementById('entry_psk_section').classList.remove('shown');
-        if (ssid)
-            document.getElementById('entry_ssid').readonly = true;
-        if (psktype != 0)
-            document.getElementById('entry_psk_section').classList.add('shown');
-        showState(2);
+        showState(1);
     }
+
 
 
     //--------------------------------------
@@ -235,45 +253,34 @@
     //--------------------------------------
 
 
-    function updateProgress()
+
+    function setInnerHTML(id,html)
     {
-        var ele;
-        if (show_state == 0)
-            ele = document.getElementById("prog1");
-        else if (show_state == 3)
-            ele = document.getElementById("prog2");
-        if (ele)
-        {
-            var max = parseInt(ele.getAttribute("max"))
-            var i = parseInt(ele.getAttribute("value"));
-            if (i >= max)
-            {
-                i = 0;
-            }
-            ele.setAttribute("value",i+1);
-        }
+        document.getElementById(id).innerHTML = html;
+    }
+
+    function setObjHTML(obj,thing)
+    {
+        if (typeof obj[thing] != undefined)
+            document.getElementById(thing).innerHTML = obj[thing];
     }
 
 
-    function checkLocal()
-    {
-        document.getElementById("host_status").innerHTML = location.host;
-        document.getElementById("browser_status").innerHTML =
-            window.navigator.onLine ? "onLine" : "not onLine";
-    }
 
 
     function startCaptive()
     {
-        interval1=setInterval(updateProgress,200);
-        interval2=setInterval(checkLocal,200);
-        interval3=setInterval(function() {
-            web_socket.send(JSON.stringify({cmd:"check_connection"}));
-        },2000);
+        setInterval(function () {
+                setInnerHTML("host_status",location.host);
+                setInnerHTML("browser_status",window.navigator.onLine ? "onLine" : "not onLine");
+            },200);
+        setInterval(function() {
+                web_socket.send(JSON.stringify({cmd:"wifi_status"}));
+            },6000);
 
         showState(0);
-        var url = 'ws://' + location.host + ':81';
 
+        var url = 'ws://' + location.host + ':81';
         web_socket = new WebSocket(url);
 
         web_socket.onopen = function(openEvent) {
@@ -289,48 +296,39 @@
         {
             var wsMsg = messageEvent.data;
             console.log("WebSocket MESSAGE: " + wsMsg);
-            if (wsMsg == "HELLO")
+
+            var obj = JSON.parse(wsMsg);
+            if (obj)
             {
-                web_socket.send(JSON.stringify({cmd:"get_network_list"}));
-            }
-            else
-            {
-                var obj = JSON.parse(wsMsg);
-                if (obj)
+                if (obj.join_network)
                 {
-                    if (obj.check_connection)
+                    if (obj.join_network == "OK")
                     {
-                        document.getElementById('iot_connection').innerHTML = "(" + iot_check_counter++ + ") " +
-                            obj.check_connection;
-                    }
-                    else if (obj.network_list)
-                    {
-                        document.getElementById('network_list').innerHTML = obj.network_list;
-                        showState(1);
-                    }
-                    else if (obj.join_network)
-                    {
-                        if (obj.join_network == "OK")
-                        {
-                            document.getElementById('connected_ssid').innerHTML = connect_ssid;
-                            showState(4);
-                        }
-                        else
-                        {
-                            alert("Could not connect to " + connect_ssid + "\n" + "Please try again ...");
-                            showState(1);
-                        }
+                        showState(4);
                     }
                     else
                     {
-                        console.log("Unknown json object");
+                        alert("Could not connect to " + connect_ssid + "\n" + "Please try again ...");
+                        showState(1);
                     }
                 }
                 else
-                    console.log("Could not parse json: " + wsMsg);
-
+                {
+                    setObjHTML(obj,'uptime');
+                    setObjHTML(obj,'iot_setup');
+                    setObjHTML(obj,'wifi_mode');
+                    setObjHTML(obj,'iot_status');
+                    setObjHTML(obj,'ap_ssid');
+                    setObjHTML(obj,'ap_ip');
+                    setObjHTML(obj,'sta_ssid');
+                    setObjHTML(obj,'sta_ip');
+                    setObjHTML(obj,'iot_setup');
+                    setObjHTML(obj,'sta_gateway');
+                }
             }
-        };
+            else
+                console.log("Could not parse json: " + wsMsg);
+        }
     }
 
 
@@ -340,55 +338,64 @@
 </head>
 
 <body>
-<div id='status'>
-    Browser: <span id='browser_status'>browser_status</span><br>
-    Host: <span id='host_status'>host_status</span><br>
-    IOTConnection: <span id='iot_connection'>iot_connection</span><br>
-</div>
+<table border='0'><tr><td valign='top'>
 
-<br><br>
-
-<div id="scanning" class="hidden">
-    <br>
-    <h2>Scanning Wifi Networks</h2>
-    <progress id="prog1" max="50">
-</div>
-
-<div id="networks" class="hidden">
-    <br>
-    <h2>Select Wifi Network for <span id='select_device_name'>this device</span></h2>
-    <div id="network_list">
-        the network list
-    </div>
-    <p><a href="javascript:refreshNetList()" class="link_button">Rescan</a></p>
-</div>
-
-<div id='entry_form' class="form-style hidden">
-    <form action='/join_network' method='get'>
-        <h1>Connect to Wifi Network</h1>
-        SSID: <input id="entry_ssid" type="text" name="ssid"/>
-        <div class='hidden' id="entry_psk_section">
-            PASS: <input id="entry_psk" type="password" name="psk"/>
-        </div>
-        <!-- p><input type="submit" value="Join"/></p-->
-        <p id="join_button" class="hidden"><a href="javascript:joinNetwork()" class="link_button">Join</a></p>
-        <div id="connecting" class='hidden'><h2>Connecting <progress id="prog2" max="40"/></h2></div>
-    </form>
-</div>
-
-<div id='connected' class='hidden'>
     <br><br>
-    <center>
-    <h2>
-        <font color='blue'><span id='device_name'>Device</span></font>
-        is connected to
-        <font color='blue'><span id='connected_ssid'>SSID</span></font>
-        <br>You may close this window
-    </h2>
-    </center>
-    <br>
-</div>
+    <table width='320px' border='0'>
+        <tr><td width='100px'>Browser</td><td id='browser_status'></td></tr>
+        <tr><td>Host</td><td id='host_status'></td></tr>
+        <tr><td>&nbsp;</td><td>&nbsp;</td></tr>
+        <tr><td>uptime</td><td id='uptime'></td></tr>
+        <tr><td>&nbsp;</td><td>&nbsp;</td></tr>
+        <tr><td>iot_setup</td><td id='iot_setup'></td></tr>
+        <tr><td>wifi_mode</td><td id='wifi_mode'></td></tr>
+        <tr><td>iot_status</td><td id='iot_status'></td></tr>
+        <tr><td>ap_ssid</td><td id='ap_ssid'></td></tr>
+        <tr><td>ap_ip</td><td id='ap_ip'></td></tr>
+        <tr><td>sta_ssid</td><td id='sta_ssid'></td></tr>
+        <tr><td>sta_ip</td><td id='sta_ip'></td></tr>
+        <tr><td>sta_gateway</td><td id='sta_gateway'></td></tr>
+    </table>
 
+</td><td>
+
+    <div id='ap_pass_form' class="form-style hidden">
+        <form>
+            <h1>Set AP Password</h1>
+            <p>
+                The Access Point is currently using the default password.<br>
+                Before you can continue, you must change the password.
+            </p>
+            Password: <input id="ap_pass1" type="password" name="ap_pass1"/>
+            Repeat: <input id="ap_pass1" type="password" name="ap_pass1"/>
+            <p align='center' id="set_button" class="hidden"><a href="javascript:setAPPassword()" class="link_button">Set</a></p>
+        </form>
+    </div>
+
+    <div id='ssid_form' class="form-style hidden">
+        <form>
+            <h1>Connect to Wifi Network</h1>
+            SSID: <input id="entry_ssid" type="text" name="ssid"/>
+            PASS: <input id="entry_psk" type="password" name="psk"/>
+            <p align='center' id="join_button" class="hidden"><a href="javascript:joinNetwork()" class="link_button">Join</a></p>
+            <div id="connecting" class='hidden'><h2>Connecting <progress id="ssid_progress" max="40"/></h2></div>
+        </form>
+    </div>
+
+    <div id='connected' class='hidden'>
+        <br><br>
+        <center>
+        <h2>
+            <font color='blue'><span id='device_name'>Device</span></font>
+            is connected to
+            <font color='blue'><span id='connect_ssid'>SSID</span></font>
+            <br>You may close this window
+        </h2>
+        </center>
+        <br>
+    </div>
+
+</td></tr></table>
 
 </body>
 </html>

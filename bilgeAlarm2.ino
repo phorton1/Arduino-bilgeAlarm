@@ -13,30 +13,13 @@ class bilgeAlarm : public myIOTDevice
 {
 public:
 
-    bilgeAlarm() {}
+    bilgeAlarm()
+    {
+        addPrefs(bilge_prefs,NUM_BILGE_PREFS);
+    }
     ~bilgeAlarm() {}
 
     virtual const char *getName() override  { return "bilgeAlarm"; }
-
-    virtual String getPreferencesList()
-    {
-        String rslt = myIOTDevice::getPreferencesList();
-        rslt += ",\n";
-        rslt += buildPreferencesList(bilge_prefs,NUM_BILGE_PREFS);
-        return rslt;
-    }
-
-
-    virtual const IOTPreference_t *findPref(const char *name) override
-    {
-        for (int i=0; i<NUM_BILGE_PREFS; i++)
-        {
-            if (!strcmp(name,bilge_prefs[i].name))
-                return &bilge_prefs[i];
-        }
-        return myIOTDevice::findPref(name);
-    }
-
 
 };
 
