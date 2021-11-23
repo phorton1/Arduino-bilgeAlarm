@@ -150,6 +150,34 @@
     var iot_check_counter = 0;
     var web_socket;
 
+
+    function setHTMLById(id,html)
+    {
+        document.getElementById(id).innerHTML = html;
+    }
+
+    function hideById(id)
+    {
+        document.getElementById(id).classList.remove('shown')
+    }
+
+    function showById(id)
+    {
+        document.getElementById(id).classList.add('shown')
+    }
+
+    function getValueById(id)
+    {
+        return document.getElementById(id).value;
+    }
+
+
+    function setObjHTML(obj,thing)
+    {
+        if (typeof obj[thing] != undefined)
+            document.getElementById(thing).innerHTML = obj[thing];
+    }
+
     //--------------------------------------
     // state machine
     //---------------------------------------
@@ -160,12 +188,12 @@
 
         console.log("showState(" + state + ")");
 
-        document.getElementById('ap_pass_form').classList.remove('shown');
-        document.getElementById('set_button').classList.remove('shown');
-        document.getElementById('ssid_form').classList.remove('shown');
-        document.getElementById('join_button').classList.remove('shown');
-        document.getElementById('connecting').classList.remove('shown');
-        document.getElementById('connected').classList.remove('shown');
+        hideById('ap_pass_form');
+        hideById('set_button');
+        hideById('ssid_form');
+        hideById('join_button');
+        hideById('connecting');
+        hideById('connected');
 
         // We may or may not get to the final connecte state in AP mode ...
         // esp if I decide that "Joining" a network amounts to rebooting
@@ -176,9 +204,9 @@
 
         if (state == 4)
         {
-            document.getElementById('connected').classList.add('shown');
-            document.getElementById('device_name').innerHTML = device_name;
-            document.getElementById('connect_ssid').innerHTML = connect_ssid;
+            showById('connected');
+            setHTMLById('device_name',device_name);
+            setHTMLById('connect_ssid',connect_ssid);
         }
 
 
@@ -187,8 +215,8 @@
 
         else if (state == 2)
         {
-            document.getElementById('ssid_form').classList.add('shown');
-            document.getElementById('connecting').classList.add('shown');
+            showById('ssid_form');
+            showById('connecting');
             document.getElementById('ssid_progress').value = 0;
             interval1=setInterval(function ()
             {
@@ -206,8 +234,8 @@
 
         else if (state == 1)
         {
-            document.getElementById('ssid_form').classList.add('shown');
-            document.getElementById('join_button').classList.add('shown');
+            showById('ssid_form');
+            showById('join_button');
         }
 
 
@@ -219,8 +247,8 @@
 
         else
         {
-            document.getElementById('ap_pass_form').classList.add('shown');
-            document.getElementById('set_button').classList.add('shown');
+            showById('ap_pass_form');
+            showById('set_button');
         }
     }
 
@@ -229,8 +257,9 @@
     {
         // called from entry buttons
         showState(2);
-        connect_ssid = document.getElementById('entry_ssid').value;
-        psk = document.getElementById('entry_psk').value;
+        connect_ssid = getValueById('entry_ssid');
+        psk = getValueById('entry_psk');
+
         // alert("joinNetwork(" + ssid + "," + psk + ")");
 
         var json = JSON.stringify({
@@ -243,7 +272,22 @@
 
     function setAPPassword()
     {
-        showState(1);
+        var p1 = getValueById('ap_pass1');
+        var p2 = getValueById('ap_pass2');
+        if (p1 == "")
+        {
+            alert("you must enter a password");
+            return;
+        }
+        else if (p1 != p2)
+        {
+            alert("passwords don't match");
+            return;
+        }
+        var json = JSON.stringify({
+            cmd : "$ap/pass=" + p1 });
+        web_socket.send(json);
+        // showState(1);
     }
 
 
@@ -254,29 +298,14 @@
 
 
 
-    function setInnerHTML(id,html)
-    {
-        document.getElementById(id).innerHTML = html;
-    }
-
-    function setObjHTML(obj,thing)
-    {
-        if (typeof obj[thing] != undefined)
-            document.getElementById(thing).innerHTML = obj[thing];
-    }
-
-
 
 
     function startCaptive()
     {
         setInterval(function () {
-                setInnerHTML("host_status",location.host);
-                setInnerHTML("browser_status",window.navigator.onLine ? "onLine" : "not onLine");
+                setHTMLById("host_status",location.host);
+                setHTMLById("browser_status",window.navigator.onLine ? "onLine" : "not onLine");
             },200);
-        setInterval(function() {
-                web_socket.send(JSON.stringify({cmd:"wifi_status"}));
-            },6000);
 
         showState(0);
 
@@ -285,6 +314,10 @@
 
         web_socket.onopen = function(openEvent) {
             console.log("WebSocket OPEN: " + JSON.stringify(openEvent, null, 4));
+            setInterval(function() {
+                web_socket.send(JSON.stringify({cmd:"wifi_status"}));
+            },6000);
+
         };
         web_socket.onclose = function (closeEvent) {
             console.log("WebSocket CLOSE: " + JSON.stringify(closeEvent, null, 4));
@@ -324,6 +357,11 @@
                     setObjHTML(obj,'sta_ip');
                     setObjHTML(obj,'iot_setup');
                     setObjHTML(obj,'sta_gateway');
+
+                    if (obj.iot_setup && show_state == 0)
+                        showState(1);
+                    else if (show_state && !obj.iot_setup)
+                        showState(0);
                 }
             }
             else
@@ -367,7 +405,7 @@
                 Before you can continue, you must change the password.
             </p>
             Password: <input id="ap_pass1" type="password" name="ap_pass1"/>
-            Repeat: <input id="ap_pass1" type="password" name="ap_pass1"/>
+            Repeat: <input id="ap_pass2" type="password" name="ap_pass2"/>
             <p align='center' id="set_button" class="hidden"><a href="javascript:setAPPassword()" class="link_button">Set</a></p>
         </form>
     </div>
