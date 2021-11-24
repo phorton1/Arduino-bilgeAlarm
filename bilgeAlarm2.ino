@@ -1,7 +1,6 @@
-#include <myDebug.h>
+
 #include <myIOTDevice.h>
-
-
+#include <myIOTLog.h>
 
 #define ONBOARD_LED             2
 
@@ -52,7 +51,7 @@ public:
     virtual void onTopicMsg(String topic, String msg)
     {
         proc_entry();
-        display(0,"bilgeAlarm::onTopicMsg(%s,%s)",topic.c_str(),msg.c_str());
+        LOGD("bilgeAlarm::onTopicMsg(%s,%s)",topic.c_str(),msg.c_str());
         if (topic == "esp32/output")
             digitalWrite(ONBOARD_LED,msg == "on" ? 1 : 0);
     }
@@ -61,13 +60,11 @@ public:
 
 
 
-
-
 void setup()
 {
     Serial.begin(115200);
     delay(1000);
-    display(0,"bilgeAlarm2.ino setup() started",0);
+    LOGI("bilgeAlarm2.ino setup() started");
     proc_entry();
 
     pinMode(ONBOARD_LED,OUTPUT);
@@ -77,7 +74,7 @@ void setup()
     my_iot_device->setup();
 
     proc_leave();
-    display(0,"bilgeAlarm2.ino setup() completed",0);
+    LOGI("bilgeAlarm2.ino setup() finished",0);
 }
 
 
