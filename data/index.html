@@ -24,15 +24,50 @@
     <script type="text/javascript">
 
         var web_socket;
+        var fake_uuid;
+        var file_request = 0;
+
+
+        function fileKB(i)
+        {
+            var rslt;
+
+            if (i > 1000000000)
+            {
+                i /= 1000000000;
+                rslt = i.toFixed(2) + " GB";
+            }
+            else if (i > 1000000)
+            {
+                i /= 1000000;
+                rslt = i.toFixed(2) + " MB";
+            }
+            else if (i > 1000)
+            {
+                i /= 1000;
+                rslt = i.toFixed(2) + " KB";
+            }
+            else
+            {
+                rslt = i;
+            }
+            return rslt;
+        }
 
         function startMyIOT()
         {
+            fake_uuid = 'xxxxxxxx'.replace(/[x]/g, (c) => {
+                const r = Math.floor(Math.random() * 16);
+                return r.toString(16);  });
+
             web_socket = new WebSocket('ws://' + location.host + ':81');
 
             web_socket.onopen = function(openEvent) {
                 console.log("WebSocket OPEN: " + JSON.stringify(openEvent, null, 4));
                 web_socket.send(JSON.stringify({cmd:"spiffs_list"}));
             };
+
+            // web_socket.onclose or onerror  re-open automagically?
 
             web_socket.onmessage = function (ws_event)
             {
@@ -42,6 +77,10 @@
                 var obj = JSON.parse(ws_msg);
                 if (obj)
                 {
+                    if (obj.error)
+                    {
+                        window.alert("ERROR: " + obj.error);
+                    }
                     if (obj.device_name)
                     {
                         document.title = obj.device_name;
@@ -51,13 +90,20 @@
                     {
                         $('table#filemanager tbody').empty();
 
+                        $('#spiffs_used').html(fileKB(obj.used) + " used");
+                        $('#spiffs_size').html("of " + fileKB(obj.total) + " total");
+
+
                         for (var i=0; i<obj.files.length; i++)
                         {
+                            var link = '<a href="/' + obj.files[i].name + '">' + obj.files[i].name + '</a>';
+                            var button = "<button onclick='confirmDelete(\"" + obj.files[i].name + "\")'>delete</button>";
+
                             $('table#filemanager tbody').append(
                                 $('<tr />').append(
-                                  $('<td />').append(obj.files[i].name),
+                                  $('<td />').append(link),
                                   $('<td />').text(obj.files[i].size),
-                                  $('<td />').text("delete") ))
+                                  $('<td />').append(button) ));
                         }
                     }
                     if (obj.upload_filename)
@@ -65,8 +111,10 @@
                         var pct = obj.upload_progress;
                         $('#upload_pct').html(obj.upload_progress + "%");
                         $('#upload_filename').html(obj.upload_filename);
-                        $('#upload_progress_dlg').modal(pct==100?'hide':'show');    // {show:true});
                         $("#upload_progress").css("width", obj.upload_progress + "%");
+
+                        if (pct >= 100)
+                            $('#upload_progress_dlg').modal('hide');
 
                         if (obj.upload_error)
                             alert("json error uploading");
@@ -76,9 +124,6 @@
             }
         }
 
-        window.onload = startMyIOT;
-
-        var file_request = 0;
 
         function uploadFiles()
         {
@@ -109,20 +154,20 @@
             }
 
             args += "&num_files=" + files.length;
-            args += "&file_request=" + file_request++;
+            args += "&file_request_id=" + fake_uuid + file_request++;
 
             var xhr = new XMLHttpRequest();
             xhr.timeout = 30000;
 
             xhr.onload = function () {
                 web_socket.send(JSON.stringify({cmd:"spiffs_list"})); };
-            xhr.onprogress = function () {
-                console.log("progress"); };
+            // xhr.onprogress = function () {
+            //     console.log("progress"); };
             xhr.ontimeout = function () {
                 alert("timeout uploading");
                 web_socket.send(JSON.stringify({cmd:"spiffs_list"})); };
             xhr.onerror = function () {
-                alert("error uploading");
+                // alert("error uploading");
                 web_socket.send(JSON.stringify({cmd:"spiffs_list"})); };
 
             if (files.length > 2 || total_bytes > 10000)
@@ -143,6 +188,14 @@
             document.getElementById('upload_files').click();
         }
 
+        function confirmDelete(fn)
+        {
+            if (window.confirm("Confirm deletion of \n" + fn))
+            {
+                web_socket.send(JSON.stringify({cmd:"spiffs_delete", filename:fn}));
+            }
+        }
+        window.onload = startMyIOT;
 
     </script>
 
@@ -204,8 +257,8 @@
                         </label>
                         <input type="file" multiple id="upload_files" onchange="uploadFiles()" style="display:none"/>
                     </th>
-                    <th>Size</th>
-                    <th>&nbsp;</th>
+                    <th id='spiffs_used'>Size</th>
+                    <th id='spiffs_size'>&nbsp;</th>
                 </tr>
             </thead>
             <tbody>
