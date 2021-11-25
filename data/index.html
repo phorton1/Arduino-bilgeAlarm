@@ -1,13 +1,204 @@
-<html>
+<!DOCTYPE html>
+<html lang="en">
 <head>
-<title>bilgeAlarm2</title>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>myIOT Demo</title>
+    <link href="bootstrap5.1.3.min.css" rel="stylesheet">
+    <script src="jquery-3.6.0.min.js"></script>
+    <!--script src="bootstrap5.1.3.min.js"></script-->
+    <script src="bootstrap5.1.3.bundle.min.js"></script>
+
+    <style>
+        .my_nav_link
+        {
+            color: #ffffff;
+        }
+        .my_nav_link:hover
+        {
+            color: #00eeee;
+        }
+    </style>
+
+    <script type="text/javascript">
+
+        var web_socket;
+
+        function startMyIOT()
+        {
+            web_socket = new WebSocket('ws://' + location.host + ':81');
+
+            web_socket.onopen = function(openEvent) {
+                console.log("WebSocket OPEN: " + JSON.stringify(openEvent, null, 4));
+                web_socket.send(JSON.stringify({cmd:"spiffs_list"}));
+            };
+
+            web_socket.onmessage = function (ws_event)
+            {
+                var ws_msg = ws_event.data;
+                console.log("WebSocket MESSAGE: " + ws_msg);
+
+                var obj = JSON.parse(ws_msg);
+                if (obj)
+                {
+                    if (obj.device_name)
+                    {
+                        document.title = obj.device_name;
+                        document.getElementById('my_brand').innerHTML = obj.device_name;
+                    }
+                    if (obj.files)
+                    {
+                        $('table#filemanager tbody').empty();
+
+                        for (var i=0; i<obj.files.length; i++)
+                        {
+                            $('table#filemanager tbody').append(
+                                $('<tr />').append(
+                                  $('<td />').append(obj.files[i].name),
+                                  $('<td />').text(obj.files[i].size),
+                                  $('<td />').text("delete") ))
+                        }
+                    }
+                }
+            }
+        }
+
+        window.onload = startMyIOT;
+
+        var file_request = 0;
+
+        function uploadFiles()
+        {
+            var files = document.getElementById('upload_files').files;
+
+            var args = "";
+
+            var formData = new FormData();
+            for (var i=0; i<files.length; i++)
+            {
+                formData.append("uploads", files[i]);
+                    // it does not appear to matter what the formdata object is named,
+                    // ANY file entries in the post data are treated as file uploads
+                    // by the ESP32 WebServer
+
+                // here we pass the filesize as an URL argument,
+                // as I still can't see a way to get the post
+                // arguments from the webserver .. it is used in
+                // my handle_upload() method to verify the final
+                // file size
+
+                if (args == "")
+                    args += "?";
+                else
+                    args += "&";
+                args += files[i].name + "S=" + files[i].size;
+            }
+
+            args += "&num_files=" + files.length;
+            args += "&file_request=" + file_request++;
+
+            var xhr = new XMLHttpRequest();
+            xhr.timeout = 30000;
+
+            xhr.onload = function () {
+                web_socket.send(JSON.stringify({cmd:"spiffs_list"})); };
+            xhr.onprogress = function () {
+                console.log("progress"); };
+            xhr.ontimeout = function () {
+                alert("timeout uploading");
+                web_socket.send(JSON.stringify({cmd:"spiffs_list"})); };
+            xhr.onerror = function () {
+                alert("error uploading");
+                web_socket.send(JSON.stringify({cmd:"spiffs_list"})); };
+
+            xhr.open("POST", "/spiffs" + args, true);
+            xhr.setRequestHeader('X-Requested-With','XMLHttpRequest');
+            xhr.send(formData);
+        }
+
+        function onUploadClick() {
+            document.getElementById('upload_files').click();
+        }
+
+
+    </script>
+
 </head>
-<body marginwidth="0" marginheight="0" bgcolor="Aqua">
-<center>
-<br><br>
+<body>
 
-<h1>You have reached the bilgeAlarm2 webpage</h1>
 
-</center>
+<nav class="navbar navbar-dark bg-dark">
+    <div class="container-fluid">
+        <a id='my_brand' class="navbar-brand" href="#">myIOT Demo</a>
+        <ul class="nav nav-dark nav-pills" id="my_nav_buttons" role="tablist">
+            <li class="nav-item">
+                <button
+                    class="nav-link my_nav_link"
+                    id="dashboard_button"
+                    data-bs-toggle="tab"
+                    data-bs-target="#dashboard">
+                    Dashboard
+                </button>
+            </li>
+            <li class="nav-item">
+                <button
+                    class="nav-link my_nav_link"
+                    id="config_button"
+                    data-bs-toggle="tab"
+                    data-bs-target="#config">
+                    Config
+                </button>
+            </li>
+            <li class="nav-item">
+                <button
+                    class="nav-link my_nav_link active"
+                    id="spiffs_button"
+                    data-bs-toggle="tab"
+                    data-bs-target="#spiffs">
+                    SPIFFS
+                </button>
+            </li>
+        </ul>
+    </div>
+</nav>
+
+
+<div id="my_tab_content" class="tab-content">
+    <div id="dashboard" class="tab-pane fade">
+        Dashboard
+    </div>
+    <div id="config" class="tab-pane fade" >
+        Config
+    </div>
+    <div id="spiffs" class="tab-pane fade show active">
+        <table class='table' id='filemanager'>
+            <thead>
+                <tr>
+                    <th>
+                        Name
+                        <label htmlFor="upload_files">
+                            <button onclick="onUploadClick()">upload</button>
+                        </label>
+                        <input type="file" multiple id="upload_files" onchange="uploadFiles()" style="display:none"/>
+                    </th>
+                    <th>Size</th>
+                    <th>&nbsp;</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr><td>test</td><td>2</td><td>&nbsp;</td></tr>
+            </tbody>
+        </table>
+
+
+
+
+        <!--input type="file" multiple id="upload_files" onchange="uploadFiles()"/-->
+
+    </div>
+</div>
+
+
 </body>
 </html>
