@@ -60,6 +60,18 @@
                                   $('<td />').text("delete") ))
                         }
                     }
+                    if (obj.upload_filename)
+                    {
+                        var pct = obj.upload_progress;
+                        $('#upload_pct').html(obj.upload_progress + "%");
+                        $('#upload_filename').html(obj.upload_filename);
+                        $('#upload_progress_dlg').modal(pct==100?'hide':'show');    // {show:true});
+                        $("#upload_progress").css("width", obj.upload_progress + "%");
+
+                        if (obj.upload_error)
+                            alert("json error uploading");
+
+                    }
                 }
             }
         }
@@ -73,7 +85,7 @@
             var files = document.getElementById('upload_files').files;
 
             var args = "";
-
+            var total_bytes = 0;
             var formData = new FormData();
             for (var i=0; i<files.length; i++)
             {
@@ -92,7 +104,8 @@
                     args += "?";
                 else
                     args += "&";
-                args += files[i].name + "S=" + files[i].size;
+                args += files[i].name + "_size=" + files[i].size;
+                total_bytes += files[i].size;
             }
 
             args += "&num_files=" + files.length;
@@ -111,6 +124,15 @@
             xhr.onerror = function () {
                 alert("error uploading");
                 web_socket.send(JSON.stringify({cmd:"spiffs_list"})); };
+
+            if (files.length > 2 || total_bytes > 10000)
+            {
+                $('#upload_filename').html(files[0].name);
+                $('#upload_progress_dlg').modal('show');    // {show:true});
+                $("#upload_progress").css("width", "0%");
+                $('#upload_pct').html("0%");
+                $('#upload_num_files').html(files.length);
+            }
 
             xhr.open("POST", "/spiffs" + args, true);
             xhr.setRequestHeader('X-Requested-With','XMLHttpRequest');
@@ -190,14 +212,46 @@
                 <tr><td>test</td><td>2</td><td>&nbsp;</td></tr>
             </tbody>
         </table>
-
-
-
-
-        <!--input type="file" multiple id="upload_files" onchange="uploadFiles()"/-->
-
     </div>
 </div>
+
+
+
+<div id="upload_progress_dlg"
+     class="modal fade"
+     data-bs-backdrop="static"
+     data-bs-keyboard="false"
+     tabindex="-1"
+     role="dialog"
+     aria-hidden="true">
+    <div class="modal-dialog modal-m">
+        <div class="modal-content" style='margin-left:30px'>
+            <div class="modal-header">
+                <h3>Uploading <span id='upload_num_files'>0</span> files ..</h3>
+            </div>
+            <div class='modal_body' style='margin-left:30px'>
+                <div class="d-flex">
+                    <div class='progress' style='width:80%;height:28px;'>
+                        <div id='upload_progress'
+                             class="progress-bar"
+                             role="progressbar"
+                             aria-valuenow="0"
+                             aria-valuemin="0"
+                             aria-valuemax="100">
+                        </div>
+                    </div>
+                    &nbsp;&nbsp;
+                    <h4 align='right' id="upload_pct"></h4>
+                </div>
+                <br>
+                <h4 id='upload_filename'>filename</h4>
+                <br>
+                &nbsp;
+            </div>
+        </div>
+   </div>
+</div>
+
 
 
 </body>
