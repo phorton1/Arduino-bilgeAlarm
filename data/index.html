@@ -84,8 +84,13 @@
                     if (obj.device_name)
                     {
                         document.title = obj.device_name;
-                        document.getElementById('my_brand').innerHTML = obj.device_name;
+                        $('#my_brand').html(obj.device_name);
                     }
+                    if (obj.version)
+                        $('#my_version').html(obj.version);
+                    if (obj.iot_version)
+                        $('#iot_version').html(obj.iot_version);
+
                     if (obj.files)
                     {
                         $('table#filemanager tbody').empty();
@@ -125,9 +130,9 @@
         }
 
 
-        function uploadFiles()
+        function uploadFiles(what)
         {
-            var files = document.getElementById('upload_files').files;
+            var files = document.getElementById(what + "_files").files;
 
             var args = "";
             var total_bytes = 0;
@@ -159,18 +164,21 @@
             var xhr = new XMLHttpRequest();
             xhr.timeout = 30000;
 
-            xhr.onload = function () {
-                web_socket.send(JSON.stringify({cmd:"spiffs_list"})); };
-            // xhr.onprogress = function () {
-            //     console.log("progress"); };
+            if (what == 'spiffs')
+            {
+                xhr.onload = function () {
+                    web_socket.send(JSON.stringify({cmd:"spiffs_list"})); };
+            }
             xhr.ontimeout = function () {
                 alert("timeout uploading");
                 web_socket.send(JSON.stringify({cmd:"spiffs_list"})); };
             xhr.onerror = function () {
                 // alert("error uploading");
                 web_socket.send(JSON.stringify({cmd:"spiffs_list"})); };
+            // xhr.onprogress = function () {
+                // console.log("progress"); };
 
-            if (files.length > 2 || total_bytes > 10000)
+            if (what == 'ota' || files.length > 2 || total_bytes > 10000)
             {
                 $('#upload_filename').html(files[0].name);
                 $('#upload_progress_dlg').modal('show');    // {show:true});
@@ -179,13 +187,17 @@
                 $('#upload_num_files').html(files.length);
             }
 
-            xhr.open("POST", "/spiffs" + args, true);
+            xhr.open("POST", "/" + what  + args, true);
             xhr.setRequestHeader('X-Requested-With','XMLHttpRequest');
             xhr.send(formData);
         }
 
+
         function onUploadClick() {
             document.getElementById('upload_files').click();
+        }
+        function onOTAClick() {
+            document.getElementById('ota_files').click();
         }
 
         function confirmDelete(fn)
@@ -205,7 +217,11 @@
 
 <nav class="navbar navbar-dark bg-dark">
     <div class="container-fluid">
-        <a id='my_brand' class="navbar-brand" href="#">myIOT Demo</a>
+        <a class="navbar-brand" href="#">
+            <span id='my_brand'>spanmyIOT Demo</span>
+            &nbsp;<span id='my_version'>v</span>
+            &nbsp;<span id='iot_version'>iot</span>
+        </a>
         <ul class="nav nav-dark nav-pills" id="my_nav_buttons" role="tablist">
             <li class="nav-item">
                 <button
@@ -255,7 +271,12 @@
                         <label htmlFor="upload_files">
                             <button onclick="onUploadClick()">upload</button>
                         </label>
-                        <input type="file" multiple id="upload_files" onchange="uploadFiles()" style="display:none"/>
+                        <input type="file" multiple id="spiffs_files" onchange="uploadFiles('spiffs')" style="display:none"/>
+
+                        <label htmlFor="ota_files">
+                            <button onclick="onOTAClick()">OTA</button>
+                        </label>
+                        <input type="file" id="ota_files" onchange="uploadFiles('ota')" style="display:none"/>
                     </th>
                     <th id='spiffs_used'>Size</th>
                     <th id='spiffs_size'>&nbsp;</th>

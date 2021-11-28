@@ -2,8 +2,9 @@
 #include <myIOTDevice.h>
 #include <myIOTLog.h>
 
-#define ONBOARD_LED             2
+#define BILGE_ALARM_VERSION "0.01"
 
+#define ONBOARD_LED             2
 
 #define DEFAULT_DISABLED            0          // enabled,disabled
 #define DEFAULT_BACKLIGHT_SECS      0          // off,secs
@@ -42,20 +43,37 @@ public:
     bilgeAlarm()
     {
         addPrefs(bilge_prefs,NUM_BILGE_PREFS);
-        addTopic("esp32/output");
+        addTopic("LED");
+        m_state_LED = "off";
     }
     ~bilgeAlarm() {}
 
     virtual const char *getName() override  { return "bilgeAlarm"; }
+    virtual const char *getVersion() override  { return BILGE_ALARM_VERSION; }
+
+    // In Node Red I have created a flow that consists of a switch
+    // which indicates the INPUT to the topic, and OUTPUTS pubslishes
+    // a retained MQQT state.
 
     virtual void onTopicMsg(String topic, String msg)
     {
         proc_entry();
         LOGD("bilgeAlarm::onTopicMsg(%s,%s)",topic.c_str(),msg.c_str());
-        if (topic == "esp32/output")
+        if (topic == "LED")
+        {
             digitalWrite(ONBOARD_LED,msg == "on" ? 1 : 0);
+            m_state_LED = msg;
+        }
+        proc_leave();
     }
 
+    virtual String getTopicState(String topic) override
+    {
+        if (topic == "LED")
+            return m_state_LED;
+    }
+
+    String m_state_LED;
 };
 
 
@@ -65,6 +83,7 @@ void setup()
     Serial.begin(115200);
     delay(1000);
     LOGI("bilgeAlarm2.ino setup() started");
+
     proc_entry();
 
     pinMode(ONBOARD_LED,OUTPUT);
@@ -72,6 +91,11 @@ void setup()
 
     my_iot_device = new bilgeAlarm();
     my_iot_device->setup();
+
+    LOGI("%s version=%s IOTVersion=%s",
+         my_iot_device->getFriendlyName().c_str(),
+         BILGE_ALARM_VERSION,
+         IOT_DEVICE_VERSION);
 
     proc_leave();
     LOGI("bilgeAlarm2.ino setup() finished",0);
