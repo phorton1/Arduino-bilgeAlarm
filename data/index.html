@@ -7,10 +7,15 @@
     <title>myIOT Demo</title>
     <link href="bootstrap5.1.3.min.css" rel="stylesheet">
     <script src="jquery-3.6.0.min.js"></script>
-    <!--script src="bootstrap5.1.3.min.js"></script-->
+    <!-- bootstrap 'bundle' is required for (at least) switch buttons -->
     <script src="bootstrap5.1.3.bundle.min.js"></script>
+    <!--script src="bootstrap5.1.3.min.js"></script-->
 
     <style>
+
+        /* change the color of bootstrap my "nav-links"
+         * so they are blue with a cyan text on hover */
+
         .my_nav_link
         {
             color: #ffffff;
@@ -19,13 +24,56 @@
         {
             color: #00eeee;
         }
+
+        /* Add a 'my_switch' class that doubles the size of the
+         * bootstrap switches. I copied these three chunks from
+         * bootstrap.css, doubled all the 'em' constants, added
+         * a 2em height, doubled the viewbox sizes from -4 -4 8 8,
+         * and the radii from 3 to 6.  I won't claim to understand
+         * how it works. Commented items are not size related. */
+
+        .my_switch.form-switch .my_switch.form-check-input
+        {
+            height:2em;
+            width: 4em;
+            margin-left: -5em;
+            background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='-8 -8 16 16'%3e%3ccircle r='6' fill='rgba%280, 0, 0, 0.25%29'/%3e%3c/svg%3e");
+            /* background-position: left center */;
+            border-radius: 4em;
+            /* transition: background-position 0.15s ease-in-out; */
+        }
+        .my_switch.form-switch .my_switch.form-check-input:focus
+        {
+            background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='-8 -8 16 16'%3e%3ccircle r='6' fill='%2386b7fe'/%3e%3c/svg%3e");
+        }
+        .my_switch.form-switch .my_switch.form-check-input:checked
+        {
+            /* background-position: right center; */
+            background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='-8 -8 16 16'%3e%3ccircle r='6' fill='%23fff'/%3e%3c/svg%3e");
+        }
+
+        /* my attempt to add a trash can button to the file list */
+
+        .my_trash_can
+        {
+            background-image: url(/trash_can.svg);
+            background-size: contain;
+            cursor: pointer;
+            display: inline-block;
+            height: 52px;
+            width: 40px;
+        }
+
+
     </style>
+
 
     <script type="text/javascript">
 
         var web_socket;
         var fake_uuid;
         var file_request = 0;
+
 
 
         function fileKB(i)
@@ -54,6 +102,19 @@
             return rslt;
         }
 
+
+        function handleTopicMsg(id,value)
+        {
+            // alert("handleTopicMsg(" + id + "," + value +")");
+            var obj =document.getElementById(id);
+            if (obj)
+            {
+                obj.checked = (value == "on");
+            }
+        }
+
+
+
         function startMyIOT()
         {
             fake_uuid = 'xxxxxxxx'.replace(/[x]/g, (c) => {
@@ -73,6 +134,16 @@
             {
                 var ws_msg = ws_event.data;
                 console.log("WebSocket MESSAGE: " + ws_msg);
+
+                if (ws_msg.startsWith('#'))
+                {
+                    var parts = ws_msg.substring(1).split("=");
+                    if (parts.length==2)
+                    {
+                        handleTopicMsg(parts[0],parts[1]);
+                        return;
+                    }
+                }
 
                 var obj = JSON.parse(ws_msg);
                 if (obj)
@@ -102,7 +173,18 @@
                         for (var i=0; i<obj.files.length; i++)
                         {
                             var link = '<a href="/' + obj.files[i].name + '">' + obj.files[i].name + '</a>';
-                            var button = "<button onclick='confirmDelete(\"" + obj.files[i].name + "\")'>delete</button>";
+                            // var button = "<button onclick='confirmDelete(\"" + obj.files[i].name + "\")'>delete</button>";
+
+                            var button = "<button " +
+                                // "class='btn btn-secondary' " +
+                                // "class='my_trash_can' " +
+
+                                "onclick='confirmDelete(\"" + obj.files[i].name + "\")'>" +
+
+                                "delete" +
+                                // "<span class='my_trash_can'>delete</span>" +
+
+                                "</button>";
 
                             $('table#filemanager tbody').append(
                                 $('<tr />').append(
@@ -192,9 +274,19 @@
             xhr.send(formData);
         }
 
+        function switchChanged(evt)
+        {
+            var cb = evt.target;
+            var value = cb.checked ? "on" : "off";
+            var id = cb.id;
+            // alert("sending cmd id=" + id + " value=" + value);
+            web_socket.send(JSON.stringify({
+                cmd:"#" + id + "=" + value}));
+        }
+
 
         function onUploadClick() {
-            document.getElementById('upload_files').click();
+            document.getElementById('spiffs_files').click();
         }
         function onOTAClick() {
             document.getElementById('ota_files').click();
@@ -218,14 +310,14 @@
 <nav class="navbar navbar-dark bg-dark">
     <div class="container-fluid">
         <a class="navbar-brand" href="#">
-            <span id='my_brand'>spanmyIOT Demo</span>
+            <span id='my_brand'>myIOT Demo</span>
             &nbsp;<span id='my_version'>v</span>
             &nbsp;<span id='iot_version'>iot</span>
         </a>
         <ul class="nav nav-dark nav-pills" id="my_nav_buttons" role="tablist">
             <li class="nav-item">
                 <button
-                    class="nav-link my_nav_link"
+                    class="nav-link my_nav_link active"
                     id="dashboard_button"
                     data-bs-toggle="tab"
                     data-bs-target="#dashboard">
@@ -243,7 +335,7 @@
             </li>
             <li class="nav-item">
                 <button
-                    class="nav-link my_nav_link active"
+                    class="nav-link my_nav_link"
                     id="spiffs_button"
                     data-bs-toggle="tab"
                     data-bs-target="#spiffs">
@@ -256,25 +348,37 @@
 
 
 <div id="my_tab_content" class="tab-content">
-    <div id="dashboard" class="tab-pane fade">
-        Dashboard
+    <div id="dashboard" class="tab-pane fade show active">
+
+    <table border=0 width='80%' align='center'>
+        <tr>
+            <td>bilgeAlarm/LED</td>
+            <td>
+                <div class="form-check form-switch my_switch">
+                    <input class="form-check-input my_switch" onchange="switchChanged(event)" type="checkbox" id="LED">
+                 </div>
+            </td>
+        </tr>
+    </table>
+
+
     </div>
     <div id="config" class="tab-pane fade" >
         Config
     </div>
-    <div id="spiffs" class="tab-pane fade show active">
+    <div id="spiffs" class="tab-pane fade">
         <table class='table' id='filemanager'>
             <thead>
                 <tr>
                     <th>
                         Name
-                        <label htmlFor="upload_files">
-                            <button onclick="onUploadClick()">upload</button>
+                        <label htmlFor="spiffs_files">
+                            <button class='btn btn-secondary' onclick="onUploadClick()">upload</button>
                         </label>
                         <input type="file" multiple id="spiffs_files" onchange="uploadFiles('spiffs')" style="display:none"/>
 
                         <label htmlFor="ota_files">
-                            <button onclick="onOTAClick()">OTA</button>
+                            <button class='btn btn-secondary' onclick="onOTAClick()">OTA</button>
                         </label>
                         <input type="file" id="ota_files" onchange="uploadFiles('ota')" style="display:none"/>
                     </th>
