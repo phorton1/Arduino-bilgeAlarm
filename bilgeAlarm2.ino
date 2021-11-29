@@ -2,7 +2,7 @@
 #include <myIOTDevice.h>
 #include <myIOTLog.h>
 
-#define BILGE_ALARM_VERSION "0.01"
+#define BILGE_ALARM_VERSION "0.03"
 
 #define ONBOARD_LED             2
 
