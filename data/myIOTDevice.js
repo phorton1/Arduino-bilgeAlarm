@@ -55,7 +55,7 @@ function startMyIOT()
 
     web_socket.onopen = function(event) {
         $('#ws_status').html("Web Socket OPEN");
-        console.log("WebSocket OPEN: " + JSON.stringify(openEvent, null, 4));
+        console.log("WebSocket OPEN: " + JSON.stringify(event, null, 4));
         web_socket.send(JSON.stringify({cmd:"spiffs_list"}));
     };
 
@@ -112,7 +112,7 @@ function startMyIOT()
                     // var button = "<button onclick='confirmDelete(\"" + obj.files[i].name + "\")'>delete</button>";
 
                     var button = "<button " +
-                        // "class='btn btn-secondary' " +
+                        "class='btn btn-secondary' " +
                         // "class='my_trash_can' " +
 
                         "onclick='confirmDelete(\"" + obj.files[i].name + "\")'>" +
