@@ -36,14 +36,150 @@ function fileKB(i)
 }
 
 
-function handleTopicMsg(id,value)
+
+//------------------------------------------------
+// HTTP File Uploader
+//------------------------------------------------
+
+function uploadFiles(what)
 {
-    // alert("handleTopicMsg(" + id + "," + value +")");
-    var obj =document.getElementById(id);
-    if (obj)
+    var files = document.getElementById(what + "_files").files;
+
+    var args = "";
+    var total_bytes = 0;
+    var formData = new FormData();
+    for (var i=0; i<files.length; i++)
     {
-        obj.checked = (value == "on");
+        formData.append("uploads", files[i]);
+            // it does not appear to matter what the formdata object is named,
+            // ANY file entries in the post data are treated as file uploads
+            // by the ESP32 WebServer
+
+        // here we pass the filesize as an URL argument,
+        // as I still can't see a way to get the post
+        // arguments from the webserver .. it is used in
+        // my handle_upload() method to verify the final
+        // file size
+
+        if (args == "")
+            args += "?";
+        else
+            args += "&";
+        args += files[i].name + "_size=" + files[i].size;
+        total_bytes += files[i].size;
     }
+
+    args += "&num_files=" + files.length;
+    args += "&file_request_id=" + fake_uuid + file_request++;
+
+    var xhr = new XMLHttpRequest();
+    xhr.timeout = 30000;
+
+    // all clients would like to know if the SPIFFS has changed.
+    // I think the spiffs list should be sent automatically to
+    // all clients on an upload success or failure
+
+    if (what == 'spiffs')
+    {
+        xhr.onload = function () {
+            // sendCommand("spiffs_list");
+            };
+        xhr.ontimeout = function () {
+            alert("timeout uploading");
+            // sendCommand("spiffs_list");
+            };
+        xhr.onerror = function () {
+            // we sometimes get http errors even though everything worked
+            // sendCommand("spiffs_list");
+            };
+    }
+    else
+    {
+        xhr.onload = function () {
+            // could do a wait window until the device has rebooted,
+            // connected, and sent us a new initial wifi_status
+            };
+        xhr.ontimeout = function () {
+            alert("timeout uploading OTA"); };
+        xhr.onerror = function () {
+            // we sometimes get http errors even though everything worked
+            };
+    }
+
+    if (what == 'ota' || files.length > 2 || total_bytes > 10000)
+    {
+        $('#upload_filename').html(files[0].name);
+        $('#upload_progress_dlg').modal('show');    // {show:true});
+        $("#upload_progress").css("width", "0%");
+        $('#upload_pct').html("0%");
+        $('#upload_num_files').html(files.length);
+    }
+
+    xhr.open("POST", "/" + what  + args, true);
+    xhr.setRequestHeader('X-Requested-With','XMLHttpRequest');
+    xhr.send(formData);
+}
+
+
+
+//--------------------------------------
+// web_socket
+//--------------------------------------
+
+
+function sendCommand(command)
+{
+    console.log("sendCommand(" + command + ")");
+    web_socket.send(JSON.stringify({cmd:command}));
+}
+
+
+function checkAlive()
+{
+    console.log("checkAlive");
+    if (!ws_alive)
+    {
+        console.log("checkAlive re-opening web_socket");
+        openWebSocket();
+    }
+    else
+    {
+        console.log("checkAlive ok");
+    }
+}
+
+function keepAlive()
+{
+    console.log("keepAlive");
+    ws_alive = 0;
+    sendCommand("ping");
+    setTimeout(checkAlive,3000);
+}
+
+
+function openWebSocket()
+{
+    console.log("openWebSocket()");
+
+    $('#ws_status').html("Web Socket " + ws_connect_count + " CLOSED");
+
+    web_socket = new WebSocket('ws://' + location.host + ':81');
+
+    web_socket.onopen = function(event)
+    {
+        ws_connect_count++;
+        $('#ws_status').html("Web Socket OPEN " + ws_connect_count);
+        console.log("WebSocket OPEN(" + ws_connect_count + "): " + JSON.stringify(event, null, 4));
+        sendCommand("spiffs_list");
+    };
+
+    web_socket.onclose = function(closeEvent)
+    {
+        console.log("Web Socket Connection lost");
+        // $('#ws_status').html("Web Socket " + ws_connect_count + " CLOSED");
+    }
+
+    web_socket.onmessage = handleWS;
 }
 
 
@@ -69,6 +205,10 @@ function handleWS(ws_event)
         {
             window.alert("ERROR: " + obj.error);
         }
+        if (obj.pong)
+        {
+            ws_alive = 1;
+        }
         if (obj.device_name)
         {
             document.title = obj.device_name;
@@ -76,7 +216,6 @@ function handleWS(ws_event)
         }
         if (obj.version)
         {
-            ws_alive = 1;
             $('#my_version').html(obj.version);
         }
         if (obj.iot_version)
@@ -88,7 +227,6 @@ function handleWS(ws_event)
 
             $('#spiffs_used').html(fileKB(obj.used) + " used");
             $('#spiffs_size').html("of " + fileKB(obj.total) + " total");
-
 
             for (var i=0; i<obj.files.length; i++)
             {
@@ -128,146 +266,41 @@ function handleWS(ws_event)
 }
 
 
-function openWebSocket()
-{
-    $('#ws_status').html("Web Socket " + ws_connect_count + " CLOSED");
 
-    web_socket = new WebSocket('ws://' + location.host + ':81');
-
-    web_socket.onopen = function(event) {
-        ws_connect_count++;
-        $('#ws_status').html("Web Socket OPEN " + ws_connect_count);
-        console.log("WebSocket OPEN(" + ws_connect_count + "): " + JSON.stringify(event, null, 4));
-        web_socket.send(JSON.stringify({cmd:"spiffs_list"}));
-        setTimeout(keepAlive,10000);
-    };
-
-    web_socket.onclose = function(closeEvent) {
-        console.log("Web Socket Connection lost");
-        // $('#ws_status').html("Web Socket " + ws_connect_count + " CLOSED");
-    }
-
-    web_socket.onmessage = handleWS;
-}
-
-
-
-function keepAlive()
-{
-    console.log("keepAlive");
-    ws_alive = 0;
-    try
-    {
-        web_socket.send(JSON.stringify({cmd:"wifi_status"}));
-    }
-    catch (err)
-    {
-        setTimeout(function () {
-            console.log("keepAlive err1 re-opening web_socket");
-            openWebSocket();
-        },5000);
-        return;
-    }
-
-    setTimeout(function(){
-        if (!ws_alive)
-        {
-            console.log("keepAlive re-opening web_socket");
-            openWebSocket();
-        }
-        else
-        {
-            console.log("keepAlive ok");
-            setTimeout(keepAlive,10000);
-        }
-    },5000);
-
-
-}
-
-function startMyIOT()
-{
-    fake_uuid = 'xxxxxxxx'.replace(/[x]/g, (c) => {
-        const r = Math.floor(Math.random() * 16);
-        return r.toString(16);  });
-
-    openWebSocket();
-}
-
-
-function uploadFiles(what)
-{
-    var files = document.getElementById(what + "_files").files;
-
-    var args = "";
-    var total_bytes = 0;
-    var formData = new FormData();
-    for (var i=0; i<files.length; i++)
-    {
-        formData.append("uploads", files[i]);
-            // it does not appear to matter what the formdata object is named,
-            // ANY file entries in the post data are treated as file uploads
-            // by the ESP32 WebServer
-
-        // here we pass the filesize as an URL argument,
-        // as I still can't see a way to get the post
-        // arguments from the webserver .. it is used in
-        // my handle_upload() method to verify the final
-        // file size
-
-        if (args == "")
-            args += "?";
-        else
-            args += "&";
-        args += files[i].name + "_size=" + files[i].size;
-        total_bytes += files[i].size;
-    }
-
-    args += "&num_files=" + files.length;
-    args += "&file_request_id=" + fake_uuid + file_request++;
-
-    var xhr = new XMLHttpRequest();
-    xhr.timeout = 30000;
-
-    if (what == 'spiffs')
-    {
-        xhr.onload = function () {
-            web_socket.send(JSON.stringify({cmd:"spiffs_list"})); };
-    }
-    xhr.ontimeout = function () {
-        alert("timeout uploading");
-        web_socket.send(JSON.stringify({cmd:"spiffs_list"})); };
-    xhr.onerror = function () {
-        // alert("error uploading");
-        web_socket.send(JSON.stringify({cmd:"spiffs_list"})); };
-    // xhr.onprogress = function () {
-        // console.log("progress"); };
-
-    if (what == 'ota' || files.length > 2 || total_bytes > 10000)
-    {
-        $('#upload_filename').html(files[0].name);
-        $('#upload_progress_dlg').modal('show');    // {show:true});
-        $("#upload_progress").css("width", "0%");
-        $('#upload_pct').html("0%");
-        $('#upload_num_files').html(files.length);
-    }
-
-    xhr.open("POST", "/" + what  + args, true);
-    xhr.setRequestHeader('X-Requested-With','XMLHttpRequest');
-    xhr.send(formData);
-}
-
+//------------------------------------------------
+// topic button and message handlers
+//------------------------------------------------
 
 function switchChanged(evt)
 {
     var cb = evt.target;
     var value = cb.checked ? "on" : "off";
     var id = cb.id;
-    // alert("sending cmd id=" + id + " value=" + value);
-    web_socket.send(JSON.stringify({
-        cmd:"#" + id + "=" + value}));
+    sendCommand("#" + id + "=" + value);
 }
 
+
+function handleTopicMsg(id,value)
+{
+    var obj = document.getElementById(id);
+    if (obj)
+    {
+        obj.checked = (value == "on");
+    }
+}
+
+
+//------------------------------------------------
+// click handlers
+//------------------------------------------------
+
+function confirmDelete(fn)
+{
+    if (window.confirm("Confirm deletion of \n" + fn))
+    {
+        web_socket.send(JSON.stringify({cmd:"spiffs_delete", filename:fn}));
+    }
+}
 
 function onUploadClick()
 {
@@ -279,12 +312,27 @@ function onOTAClick()
     document.getElementById('ota_files').click();
 }
 
-function confirmDelete(fn)
+
+//------------------------------------------------
+// startMyIOT()
+//------------------------------------------------
+
+function startMyIOT()
 {
-    if (window.confirm("Confirm deletion of \n" + fn))
-    {
-        web_socket.send(JSON.stringify({cmd:"spiffs_delete", filename:fn}));
-    }
+    console.log("startMyIOT()");
+
+    fake_uuid = 'xxxxxxxx'.replace(/[x]/g, (c) => {
+        const r = Math.floor(Math.random() * 16);
+        return r.toString(16);  });
+
+    // for debugging, wait 20 seconds before starting web socket
+
+    if (0)
+        setTimeout(openWebSocket,20000)
+    else
+        openWebSocket();
+
+    setInterval(keepAlive,10000);
 }
 
 

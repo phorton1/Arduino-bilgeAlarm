@@ -56,7 +56,7 @@ public:
     // which indicates the INPUT to the topic, and OUTPUTS pubslishes
     // a retained MQQT state.
 
-    virtual void onTopicMsg(String topic, String msg)
+    virtual void onTopicMsg(String topic, String msg) override
     {
         proc_entry();
         LOGD("bilgeAlarm::onTopicMsg(%s,%s)",topic.c_str(),msg.c_str());
@@ -76,6 +76,8 @@ public:
 
     String m_state_LED;
 };
+
+
 
 bilgeAlarm *bilge_alarm = NULL;
 
@@ -107,7 +109,7 @@ void setup()
 
 void loop()
 {
-    // on for between 2 and 10 seconds every
+    // turn the LED for between 2 and 10 seconds every
     // 30 seconds to 30 minutes
 
     uint32_t now = millis();
@@ -126,11 +128,12 @@ void loop()
 
         String cmd("#");
         cmd += "LED=";
-        cmd += bilge_alarm->m_state_LED == "on" ? "off" : "on";
+        cmd += on ? "off" : "on";
         bilge_alarm->handleCommand(cmd);
 
         LOGD("RANDOM %s amount=%0.3f min=%d max=%d next=%d",cmd.c_str(),
              amount,min,max,next_random_amount);
     }
+
     my_iot_device->loop();
 }
