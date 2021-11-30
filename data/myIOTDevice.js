@@ -114,12 +114,9 @@ function startMyIOT()
                     var button = "<button " +
                         "class='btn btn-secondary' " +
                         // "class='my_trash_can' " +
-
                         "onclick='confirmDelete(\"" + obj.files[i].name + "\")'>" +
-
                         "delete" +
                         // "<span class='my_trash_can'>delete</span>" +
-
                         "</button>";
 
                     $('table#filemanager tbody').append(
