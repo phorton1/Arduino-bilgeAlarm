@@ -1,6 +1,7 @@
 
 #include <myIOTDevice.h>
 #include <myIOTLog.h>
+#include <cstdlib>
 
 #define BILGE_ALARM_VERSION "0.03"
 
@@ -76,6 +77,7 @@ public:
     String m_state_LED;
 };
 
+bilgeAlarm *bilge_alarm = NULL;
 
 
 void setup()
@@ -89,7 +91,7 @@ void setup()
     pinMode(ONBOARD_LED,OUTPUT);
     digitalWrite(ONBOARD_LED,0);
 
-    my_iot_device = new bilgeAlarm();
+    my_iot_device = bilge_alarm = new bilgeAlarm();
     my_iot_device->setup();
 
     LOGI("%s version=%s IOTVersion=%s",
@@ -102,7 +104,33 @@ void setup()
 }
 
 
+
 void loop()
 {
+    // on for between 2 and 10 seconds every
+    // 30 seconds to 30 minutes
+
+    uint32_t now = millis();
+    static uint32_t last_random_time = 0;
+    static uint32_t next_random_amount = 30000;
+    if (now > last_random_time + next_random_amount)
+    {
+        bool on = bilge_alarm->m_state_LED == "on";
+        uint32_t min = on ? 30*1000 : 2000;
+        uint32_t max = on ? 1800*1000 : 8000;
+
+        last_random_time = now;
+        float amount = std::rand();
+        amount /= RAND_MAX;
+        next_random_amount = (amount * max) + min;
+
+        String cmd("#");
+        cmd += "LED=";
+        cmd += bilge_alarm->m_state_LED == "on" ? "off" : "on";
+        bilge_alarm->handleCommand(cmd);
+
+        LOGD("RANDOM %s amount=%0.3f min=%d max=%d next=%d",cmd.c_str(),
+             amount,min,max,next_random_amount);
+    }
     my_iot_device->loop();
 }

@@ -1,6 +1,9 @@
 
 
 var web_socket;
+var ws_connect_count = 0;
+var ws_alive = 0;
+
 var fake_uuid;
 var file_request = 0;
 
@@ -44,6 +47,143 @@ function handleTopicMsg(id,value)
 }
 
 
+function handleWS(ws_event)
+{
+    var ws_msg = ws_event.data;
+    console.log("WebSocket MESSAGE: " + ws_msg);
+
+    if (ws_msg.startsWith('#'))
+    {
+        var parts = ws_msg.substring(1).split("=");
+        if (parts.length==2)
+        {
+            handleTopicMsg(parts[0],parts[1]);
+            return;
+        }
+    }
+
+    var obj = JSON.parse(ws_msg);
+    if (obj)
+    {
+        if (obj.error)
+        {
+            window.alert("ERROR: " + obj.error);
+        }
+        if (obj.device_name)
+        {
+            document.title = obj.device_name;
+            $('#my_brand').html(obj.device_name);
+        }
+        if (obj.version)
+        {
+            ws_alive = 1;
+            $('#my_version').html(obj.version);
+        }
+        if (obj.iot_version)
+            $('#iot_version').html(obj.iot_version);
+
+        if (obj.files)
+        {
+            $('table#filemanager tbody').empty();
+
+            $('#spiffs_used').html(fileKB(obj.used) + " used");
+            $('#spiffs_size').html("of " + fileKB(obj.total) + " total");
+
+
+            for (var i=0; i<obj.files.length; i++)
+            {
+                var link = '<a href="/' + obj.files[i].name + '">' + obj.files[i].name + '</a>';
+                // var button = "<button onclick='confirmDelete(\"" + obj.files[i].name + "\")'>delete</button>";
+
+                var button = "<button " +
+                    "class='btn btn-secondary' " +
+                    // "class='my_trash_can' " +
+                    "onclick='confirmDelete(\"" + obj.files[i].name + "\")'>" +
+                    "delete" +
+                    // "<span class='my_trash_can'>delete</span>" +
+                    "</button>";
+
+                $('table#filemanager tbody').append(
+                    $('<tr />').append(
+                      $('<td />').append(link),
+                      $('<td />').text(obj.files[i].size),
+                      $('<td />').append(button) ));
+            }
+        }
+        if (obj.upload_filename)
+        {
+            var pct = obj.upload_progress;
+            $('#upload_pct').html(obj.upload_progress + "%");
+            $('#upload_filename').html(obj.upload_filename);
+            $("#upload_progress").css("width", obj.upload_progress + "%");
+
+            if (pct >= 100)
+                $('#upload_progress_dlg').modal('hide');
+
+            if (obj.upload_error)
+                alert("json error uploading");
+
+        }
+    }
+}
+
+
+function openWebSocket()
+{
+    $('#ws_status').html("Web Socket " + ws_connect_count + " CLOSED");
+
+    web_socket = new WebSocket('ws://' + location.host + ':81');
+
+    web_socket.onopen = function(event) {
+        ws_connect_count++;
+        $('#ws_status').html("Web Socket OPEN " + ws_connect_count);
+        console.log("WebSocket OPEN(" + ws_connect_count + "): " + JSON.stringify(event, null, 4));
+        web_socket.send(JSON.stringify({cmd:"spiffs_list"}));
+        setTimeout(keepAlive,10000);
+    };
+
+    web_socket.onclose = function(closeEvent) {
+        console.log("Web Socket Connection lost");
+        // $('#ws_status').html("Web Socket " + ws_connect_count + " CLOSED");
+    }
+
+    web_socket.onmessage = handleWS;
+}
+
+
+
+function keepAlive()
+{
+    console.log("keepAlive");
+    ws_alive = 0;
+    try
+    {
+        web_socket.send(JSON.stringify({cmd:"wifi_status"}));
+    }
+    catch (err)
+    {
+        setTimeout(function () {
+            console.log("keepAlive err1 re-opening web_socket");
+            openWebSocket();
+        },5000);
+        return;
+    }
+
+    setTimeout(function(){
+        if (!ws_alive)
+        {
+            console.log("keepAlive re-opening web_socket");
+            openWebSocket();
+        }
+        else
+        {
+            console.log("keepAlive ok");
+            setTimeout(keepAlive,10000);
+        }
+    },5000);
+
+
+}
 
 function startMyIOT()
 {
@@ -51,97 +191,7 @@ function startMyIOT()
         const r = Math.floor(Math.random() * 16);
         return r.toString(16);  });
 
-    web_socket = new WebSocket('ws://' + location.host + ':81');
-
-    web_socket.onopen = function(event) {
-        $('#ws_status').html("Web Socket OPEN");
-        console.log("WebSocket OPEN: " + JSON.stringify(event, null, 4));
-        web_socket.send(JSON.stringify({cmd:"spiffs_list"}));
-    };
-
-    web_socket.onclose = function(closeEvent) {
-        alert("Web Socket Connection lost");
-        $('#ws_status').html("Web Socket CLOSED");
-    }
-
-    // web_socket.onclose or onerror  re-open automagically?
-
-    web_socket.onmessage = function (ws_event)
-    {
-        var ws_msg = ws_event.data;
-        console.log("WebSocket MESSAGE: " + ws_msg);
-
-        if (ws_msg.startsWith('#'))
-        {
-            var parts = ws_msg.substring(1).split("=");
-            if (parts.length==2)
-            {
-                handleTopicMsg(parts[0],parts[1]);
-                return;
-            }
-        }
-
-        var obj = JSON.parse(ws_msg);
-        if (obj)
-        {
-            if (obj.error)
-            {
-                window.alert("ERROR: " + obj.error);
-            }
-            if (obj.device_name)
-            {
-                document.title = obj.device_name;
-                $('#my_brand').html(obj.device_name);
-            }
-            if (obj.version)
-                $('#my_version').html(obj.version);
-            if (obj.iot_version)
-                $('#iot_version').html(obj.iot_version);
-
-            if (obj.files)
-            {
-                $('table#filemanager tbody').empty();
-
-                $('#spiffs_used').html(fileKB(obj.used) + " used");
-                $('#spiffs_size').html("of " + fileKB(obj.total) + " total");
-
-
-                for (var i=0; i<obj.files.length; i++)
-                {
-                    var link = '<a href="/' + obj.files[i].name + '">' + obj.files[i].name + '</a>';
-                    // var button = "<button onclick='confirmDelete(\"" + obj.files[i].name + "\")'>delete</button>";
-
-                    var button = "<button " +
-                        "class='btn btn-secondary' " +
-                        // "class='my_trash_can' " +
-                        "onclick='confirmDelete(\"" + obj.files[i].name + "\")'>" +
-                        "delete" +
-                        // "<span class='my_trash_can'>delete</span>" +
-                        "</button>";
-
-                    $('table#filemanager tbody').append(
-                        $('<tr />').append(
-                          $('<td />').append(link),
-                          $('<td />').text(obj.files[i].size),
-                          $('<td />').append(button) ));
-                }
-            }
-            if (obj.upload_filename)
-            {
-                var pct = obj.upload_progress;
-                $('#upload_pct').html(obj.upload_progress + "%");
-                $('#upload_filename').html(obj.upload_filename);
-                $("#upload_progress").css("width", obj.upload_progress + "%");
-
-                if (pct >= 100)
-                    $('#upload_progress_dlg').modal('hide');
-
-                if (obj.upload_error)
-                    alert("json error uploading");
-
-            }
-        }
-    }
+    openWebSocket();
 }
 
 
