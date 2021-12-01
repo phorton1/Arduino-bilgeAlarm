@@ -35,10 +35,19 @@
             <li class="nav-item">
                 <button
                     class="nav-link my_nav_link"
-                    id="config_button"
+                    id="prefs_button"
                     data-bs-toggle="tab"
-                    data-bs-target="#config">
-                    Config
+                    data-bs-target="#prefs">
+                    Prefs
+                </button>
+            </li>
+            <li class="nav-item">
+                <button
+                    class="nav-link my_nav_link"
+                    id="topics_button"
+                    data-bs-toggle="tab"
+                    data-bs-target="#topics">
+                    Topics
                 </button>
             </li>
             <li class="nav-item">
@@ -58,6 +67,8 @@
 <div id="my_tab_content" class="tab-content">
     <div id="dashboard" class="tab-pane fade show active">
 
+    <!-- dashboard tab -->
+
     <table border=0 width='80%' align='center'>
         <tr>
             <td>bilgeAlarm/LED</td>
@@ -69,11 +80,40 @@
         </tr>
     </table>
 
+    <!-- prefs and topic tabs -->
 
     </div>
-    <div id="config" class="tab-pane fade" >
-        Config
+    <div id="prefs" class="tab-pane fade" >
+        <table class='table' id='prefs_table'>
+            <thead>
+                <tr>
+                    <th>Pref Name</th>
+                    <th>Value</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr><td>test</td><td>2</td><td>&nbsp;</td></tr>
+            </tbody>
+        </table>
     </div>
+
+    <div id="topics" class="tab-pane fade" >
+        <table class='table' id='topics_table'>
+            <thead>
+                <tr>
+                    <th>Topic Name</th>
+                    <th>Value</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr><td>test</td><td>2</td><td>&nbsp;</td></tr>
+            </tbody>
+        </table>
+    </div>
+
+
+    <!-- SPIFFS tab -->
+
     <div id="spiffs" class="tab-pane fade">
         <table class='table' id='filemanager'>
             <thead>

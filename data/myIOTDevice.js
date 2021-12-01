@@ -171,6 +171,8 @@ function openWebSocket()
         $('#ws_status').html("Web Socket OPEN " + ws_connect_count);
         console.log("WebSocket OPEN(" + ws_connect_count + "): " + JSON.stringify(event, null, 4));
         sendCommand("spiffs_list");
+        sendCommand("prefs_list");
+        sendCommand("topics_list");
     };
 
     web_socket.onclose = function(closeEvent)
@@ -180,6 +182,27 @@ function openWebSocket()
     }
 
     web_socket.onmessage = handleWS;
+}
+
+
+
+function fillTable(what,items)  // what == 'pref' or 'topic'
+{
+    var table_id = 'table#' + what + 's_table tbody';
+    $(table_id).empty();
+    for (var i=0; i<items.length; i++)
+    {
+        var id = what + "_" + items[i].name;
+        var input = "<input type='text' " +
+            "id='" + id + "' " +
+            "value='" + items[i].value + "' " +
+            "onchange='onItemChange(event)'" +
+            "'/>";
+        $(table_id).append(
+            $('<tr />').append(
+              $('<td />').text(items[i].name),
+              $('<td />').html(input) ));
+    }
 }
 
 
@@ -221,6 +244,11 @@ function handleWS(ws_event)
         if (obj.iot_version)
             $('#iot_version').html(obj.iot_version);
 
+        if (obj.topics)
+            fillTable('topic',obj.topics);
+        if (obj.prefs)
+            fillTable('pref',obj.prefs);
+
         if (obj.files)
         {
             $('table#filemanager tbody').empty();
@@ -248,6 +276,7 @@ function handleWS(ws_event)
                       $('<td />').append(button) ));
             }
         }
+
         if (obj.upload_filename)
         {
             var pct = obj.upload_progress;
@@ -282,13 +311,32 @@ function switchChanged(evt)
 
 function handleTopicMsg(id,value)
 {
+    // $(id).checked = (value == "1");
+    // $("topic_" + id).value = value;
+
     var obj = document.getElementById(id);
     if (obj)
-    {
         obj.checked = (value == "1");
-    }
+    obj = document.getElementById("topic_" + id);
+    if (obj)
+        obj.value = value;
 }
 
+
+function onItemChange(evt)
+{
+    var obj = evt.target;
+    var id = obj.id;
+    var is_pref = id.startsWith("pref_");
+    var name = is_pref ? id.substr(5) : id.substr(6);
+
+    alert("onItemChange(" + id + ") is_pref=" + is_pref + " name=" + name + " obj=" + obj);
+
+    var cmd = is_pref ? "$" : "#";
+    cmd += name + "=";
+    cmd += obj.value;
+    sendCommand(cmd);
+}
 
 //------------------------------------------------
 // click handlers
