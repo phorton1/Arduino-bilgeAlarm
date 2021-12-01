@@ -19,21 +19,22 @@
 #define DEFAULT_RUN_EMERGENCY       30         // 255
 
 
-const IOTPreference_t bilge_prefs[] =
+const iotElement_t bilge_elements[] =
 {
-    { "DISABLED",         1000,    PREFERENCE_TYPE_INT,     { .int_range = { DEFAULT_DISABLED, 0, 1}} },
-    { "BACKLIGHT_SECS",   1010,    PREFERENCE_TYPE_INT,     { .int_range = { DEFAULT_BACKLIGHT_SECS, 0, 255}} },
-    { "ERR_RUN_TIME",     1020,    PREFERENCE_TYPE_INT,     { .int_range = { DEFAULT_ERR_RUN_TIME, 0, 255}} },
-    { "CRIT_RUN_TIME",    1030,    PREFERENCE_TYPE_INT,     { .int_range = { DEFAULT_CRIT_RUN_TIME, 0, 255}} },
-    { "ERR_PER_HOUR",     1040,    PREFERENCE_TYPE_INT,     { .int_range = { DEFAULT_ERR_PER_HOUR, 0, 255}} },
-    { "ERR_PER_DAY",      1050,    PREFERENCE_TYPE_INT,     { .int_range = { DEFAULT_ERR_PER_DAY, 0, 255}} },
-    { "EXTRA_RUN_TIME",   1060,    PREFERENCE_TYPE_INT,     { .int_range = { DEFAULT_EXTRA_RUN_TIME, 0, 255}} },
-    { "EXTRA_RUN_MODE",   1070,    PREFERENCE_TYPE_INT,     { .int_range = { DEFAULT_EXTRA_RUN_MODE, 0, 1}} },
-    { "END_RUN_DELAY",    1080,    PREFERENCE_TYPE_INT,     { .int_range = { DEFAULT_END_RUN_DELAY, 0, 255}} },
-    { "RUN_EMERGENCY",    1090,    PREFERENCE_TYPE_INT,     { .int_range = { DEFAULT_RUN_EMERGENCY, 0, 255}} },
+    { "DISABLED",         ELEMENT_CLASS_PREF,    ELEMENT_TYPE_INT,     { .int_range = { DEFAULT_DISABLED, 0, 1}} },
+    { "BACKLIGHT_SECS",   ELEMENT_CLASS_PREF,    ELEMENT_TYPE_INT,     { .int_range = { DEFAULT_BACKLIGHT_SECS, 0, 255}} },
+    { "ERR_RUN_TIME",     ELEMENT_CLASS_PREF,    ELEMENT_TYPE_INT,     { .int_range = { DEFAULT_ERR_RUN_TIME, 0, 255}} },
+    { "CRIT_RUN_TIME",    ELEMENT_CLASS_PREF,    ELEMENT_TYPE_INT,     { .int_range = { DEFAULT_CRIT_RUN_TIME, 0, 255}} },
+    { "ERR_PER_HOUR",     ELEMENT_CLASS_PREF,    ELEMENT_TYPE_INT,     { .int_range = { DEFAULT_ERR_PER_HOUR, 0, 255}} },
+    { "ERR_PER_DAY",      ELEMENT_CLASS_PREF,    ELEMENT_TYPE_INT,     { .int_range = { DEFAULT_ERR_PER_DAY, 0, 255}} },
+    { "EXTRA_RUN_TIME",   ELEMENT_CLASS_PREF,    ELEMENT_TYPE_INT,     { .int_range = { DEFAULT_EXTRA_RUN_TIME, 0, 255}} },
+    { "EXTRA_RUN_MODE",   ELEMENT_CLASS_PREF,    ELEMENT_TYPE_INT,     { .int_range = { DEFAULT_EXTRA_RUN_MODE, 0, 1}} },
+    { "END_RUN_DELAY",    ELEMENT_CLASS_PREF,    ELEMENT_TYPE_INT,     { .int_range = { DEFAULT_END_RUN_DELAY, 0, 255}} },
+    { "RUN_EMERGENCY",    ELEMENT_CLASS_PREF,    ELEMENT_TYPE_INT,     { .int_range = { DEFAULT_RUN_EMERGENCY, 0, 255}} },
+    { "LED",              ELEMENT_CLASS_TOPIC,   ELEMENT_TYPE_INT,     { .int_range = { 0, 0, 1}} },
 };
 
-#define NUM_BILGE_PREFS (sizeof(bilge_prefs)/sizeof(IOTPreference_t))
+#define NUM_BILGE_ELEMENTS (sizeof(bilge_elements)/sizeof(iotElement_t))
 
 
 
@@ -43,9 +44,8 @@ public:
 
     bilgeAlarm()
     {
-        addPrefs(bilge_prefs,NUM_BILGE_PREFS);
-        addTopic("LED");
-        m_state_LED = "off";
+        addElements(bilge_elements,NUM_BILGE_ELEMENTS);
+        m_state_LED = 0;
     }
     ~bilgeAlarm() {}
 
@@ -62,8 +62,8 @@ public:
         LOGD("bilgeAlarm::onTopicMsg(%s,%s)",topic.c_str(),msg.c_str());
         if (topic == "LED")
         {
-            digitalWrite(ONBOARD_LED,msg == "on" ? 1 : 0);
-            m_state_LED = msg;
+            m_state_LED = msg == "1" ? 1 : 0;
+            digitalWrite(ONBOARD_LED,m_state_LED);
         }
         proc_leave();
     }
@@ -71,10 +71,10 @@ public:
     virtual String getTopicState(String topic) override
     {
         if (topic == "LED")
-            return m_state_LED;
+            return String(m_state_LED);
     }
 
-    String m_state_LED;
+    bool m_state_LED;
 };
 
 
@@ -109,31 +109,32 @@ void setup()
 
 void loop()
 {
-    // turn the LED for between 2 and 10 seconds every
-    // 30 seconds to 30 minutes
+    #if 0
+        // turn the LED for between 2 and 10 seconds every
+        // 30 seconds to 30 minutes
+        uint32_t now = millis();
+        static uint32_t last_random_time = 0;
+        static uint32_t next_random_amount = 30000;
+        if (now > last_random_time + next_random_amount)
+        {
+            bool on = bilge_alarm->m_state_LED == "on";
+            uint32_t min = on ? 30*1000 : 2000;
+            uint32_t max = on ? 1800*1000 : 8000;
 
-    uint32_t now = millis();
-    static uint32_t last_random_time = 0;
-    static uint32_t next_random_amount = 30000;
-    if (now > last_random_time + next_random_amount)
-    {
-        bool on = bilge_alarm->m_state_LED == "on";
-        uint32_t min = on ? 30*1000 : 2000;
-        uint32_t max = on ? 1800*1000 : 8000;
+            last_random_time = now;
+            float amount = std::rand();
+            amount /= RAND_MAX;
+            next_random_amount = (amount * max) + min;
 
-        last_random_time = now;
-        float amount = std::rand();
-        amount /= RAND_MAX;
-        next_random_amount = (amount * max) + min;
+            String cmd("#");
+            cmd += "LED=";
+            cmd += on ? "off" : "on";
+            bilge_alarm->handleCommand(cmd);
 
-        String cmd("#");
-        cmd += "LED=";
-        cmd += on ? "off" : "on";
-        bilge_alarm->handleCommand(cmd);
-
-        LOGD("RANDOM %s amount=%0.3f min=%d max=%d next=%d",cmd.c_str(),
-             amount,min,max,next_random_amount);
-    }
+            LOGD("RANDOM %s amount=%0.3f min=%d max=%d next=%d",cmd.c_str(),
+                 amount,min,max,next_random_amount);
+        }
+    #endif
 
     my_iot_device->loop();
 }

@@ -274,7 +274,7 @@ function handleWS(ws_event)
 function switchChanged(evt)
 {
     var cb = evt.target;
-    var value = cb.checked ? "on" : "off";
+    var value = cb.checked ? "1" : "0";
     var id = cb.id;
     sendCommand("#" + id + "=" + value);
 }
@@ -285,7 +285,7 @@ function handleTopicMsg(id,value)
     var obj = document.getElementById(id);
     if (obj)
     {
-        obj.checked = (value == "on");
+        obj.checked = (value == "1");
     }
 }
 
