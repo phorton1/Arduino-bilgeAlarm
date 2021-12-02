@@ -1,12 +1,33 @@
+// topic, pref, and spiffs file list handling:
+//
+// onload this script asks for the spiffs_list, topics_list, and prefs_list
+//
+// on the server, any changes to the SPIFFS result in a broadcast spiffs list getting sent out
+//    and so this object repopulates the SPIFFS directory listing in response.
+//
+//    note that upload progress is broadcast as well, with the notion that the server only
+//    allows one client at a time to do uploads, and only that client will have the progress
+//    modal dialog displayed (the others will waste javascript time).
+//
+// however, the prefs and topics lists are only gotten once at onload.
+//    thereafter on the server if there is a change to a pref or topic,
+//    it is broadcast as a #id=value or $id=value message
+//
+//    the prefs and topics are maintained in a list locally for change detection, etc.
+
 
 
 var web_socket;
+
 var ws_connect_count = 0;
 var ws_alive = 0;
+var debug_alive = 0;
 
 var fake_uuid;
-var file_request = 0;
+var file_request_num = 0;
 
+var prefs;
+var topics;
 
 
 function fileKB(i)
@@ -44,6 +65,7 @@ function fileKB(i)
 function uploadFiles(what)
 {
     var files = document.getElementById(what + "_files").files;
+        // jquery object doesn't seem to work here
 
     var args = "";
     var total_bytes = 0;
@@ -70,7 +92,7 @@ function uploadFiles(what)
     }
 
     args += "&num_files=" + files.length;
-    args += "&file_request_id=" + fake_uuid + file_request++;
+    args += "&file_request_num_id=" + fake_uuid + file_request_num++;
 
     var xhr = new XMLHttpRequest();
     xhr.timeout = 30000;
@@ -129,20 +151,22 @@ function uploadFiles(what)
 
 function sendCommand(command)
 {
-    console.log("sendCommand(" + command + ")");
+    if (debug_alive || !command.includes("ping"))
+        console.log("sendCommand(" + command + ")");
     web_socket.send(JSON.stringify({cmd:command}));
 }
 
 
 function checkAlive()
 {
-    console.log("checkAlive");
+    if (debug_alive)
+        console.log("checkAlive");
     if (!ws_alive)
     {
         console.log("checkAlive re-opening web_socket");
         openWebSocket();
     }
-    else
+    else if (debug_alive)
     {
         console.log("checkAlive ok");
     }
@@ -150,7 +174,8 @@ function checkAlive()
 
 function keepAlive()
 {
-    console.log("keepAlive");
+    if (debug_alive)
+        console.log("keepAlive");
     ws_alive = 0;
     sendCommand("ping");
     setTimeout(checkAlive,3000);
@@ -202,14 +227,27 @@ function fillTable(what,items)  // what == 'pref' or 'topic'
             $('<tr />').append(
               $('<td />').text(items[i].name),
               $('<td />').html(input) ));
+        if (what == "topic")
+            handleTopicMsg(items[i].name,items[i].value);
     }
 }
 
 
+function createHash(items)
+{
+    var hash = {};
+    for (var i=0; i<items.length; i++)
+    {
+        hash[items[i].name] = items[i];
+    }
+    return hash;
+}
+
 function handleWS(ws_event)
 {
     var ws_msg = ws_event.data;
-    console.log("WebSocket MESSAGE: " + ws_msg);
+    if (debug_alive || !ws_msg.includes("pong"))
+        console.log("WebSocket MESSAGE: " + ws_msg);
 
     if (ws_msg.startsWith('#'))
     {
@@ -245,9 +283,15 @@ function handleWS(ws_event)
             $('#iot_version').html(obj.iot_version);
 
         if (obj.topics)
+        {
+            topics = createHash(obj.topics);
             fillTable('topic',obj.topics);
+        }
         if (obj.prefs)
+        {
+            prefs = createHash(obj.prefs);
             fillTable('pref',obj.prefs);
+        }
 
         if (obj.files)
         {
@@ -311,15 +355,20 @@ function switchChanged(evt)
 
 function handleTopicMsg(id,value)
 {
-    // $(id).checked = (value == "1");
-    // $("topic_" + id).value = value;
-
-    var obj = document.getElementById(id);
-    if (obj)
-        obj.checked = (value == "1");
-    obj = document.getElementById("topic_" + id);
-    if (obj)
-        obj.value = value;
+    if (0)  // jquery approach does not seem to work here
+    {
+        $('#'+id).checked = (value == "1");
+        $("#topic_" + id).value = value;
+    }
+    else
+    {
+        var obj = document.getElementById(id);
+        if (obj)
+            obj.checked = (value == "1");
+        obj = document.getElementById("topic_" + id);
+        if (obj)
+            obj.value = value;
+    }
 }
 
 
@@ -329,8 +378,9 @@ function onItemChange(evt)
     var id = obj.id;
     var is_pref = id.startsWith("pref_");
     var name = is_pref ? id.substr(5) : id.substr(6);
+    var ele = is_pref ? prefs[name] : topics[name];
 
-    alert("onItemChange(" + id + ") is_pref=" + is_pref + " name=" + name + " obj=" + obj);
+    console.log("onItemChange(" + id + ") is_pref=" + is_pref + " name=" + name + " obj=" + obj + " type=" + ele.type);
 
     var cmd = is_pref ? "$" : "#";
     cmd += name + "=";
@@ -352,12 +402,12 @@ function confirmDelete(fn)
 
 function onUploadClick()
 {
-    document.getElementById('spiffs_files').click();
+    $('#spiffs_files').click();
 }
 
 function onOTAClick()
 {
-    document.getElementById('ota_files').click();
+    $('#ota_files').click();
 }
 
 

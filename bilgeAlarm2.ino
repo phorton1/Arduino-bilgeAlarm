@@ -65,6 +65,8 @@ public:
             m_state_LED = msg == "1" ? 1 : 0;
             digitalWrite(ONBOARD_LED,m_state_LED);
         }
+        else
+            myIOTDevice::onTopicMsg(topic,msg);
         proc_leave();
     }
 
@@ -72,6 +74,7 @@ public:
     {
         if (topic == "LED")
             return String(m_state_LED);
+        return myIOTDevice::getTopicState(topic);
     }
 
     bool m_state_LED;
