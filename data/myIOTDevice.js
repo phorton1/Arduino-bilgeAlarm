@@ -15,6 +15,20 @@
 //    it is broadcast as a #id=value or $id=value message
 
 
+const ELEMENT_CLASS_PREF        =  0x0001;     // stored in NVS; accessible via $name and pref accessors
+const ELEMENT_CLASS_TOPIC_PUB   =  0x0002;     // will be published; accessible via #name and topic accessors
+const ELEMENT_CLASS_TOPIC_SUB   =  0x0004;     // will be subsceibed to; accessible via #name and topic accessors
+const ELEMENT_CLASS_COMMAND     =  0x0010;     // monadic; no prefix or equal sign required
+const ELEMENT_CLASS_WRITEONLY   =  0x0100;     // for passwords - never displayed or transmitted publicly
+const ELEMENT_CLASS_HISTORY     =  0x1000;     // changes with timestamp will be stored persitently on SD card if available
+const ELEMENT_CLASS_ALL         =  0xffff;
+
+const ELEMENT_CLASS_TOPIC       =  (ELEMENT_CLASS_TOPIC_PUB | ELEMENT_CLASS_TOPIC_SUB);
+const ELEMENT_CLASS_PASSWORD    =  (ELEMENT_CLASS_PREF | ELEMENT_CLASS_WRITEONLY);
+
+
+
+
 var fake_uuid;
 
 var web_socket;
@@ -171,6 +185,7 @@ function openWebSocket()
     $('#ws_status').html("Web Socket " + ws_connect_count + " CLOSED");
 
     web_socket = new WebSocket('ws://' + location.host + ':81');
+    $('table#dashboard_table tbody').empty();
 
     web_socket.onopen = function(event)
     {
@@ -292,6 +307,33 @@ function updateSPIFFSList(obj)
 }
 
 
+
+function inputElement(item)
+{
+    var what = (item.cls & ELEMENT_CLASS_PREF) ?
+        "pref" : "topic";
+
+    var input = $('<input>').attr({
+        name : item.name,
+        id : what + "_" + item.name,
+        type : (item.type == "F" || item.type == "I") ? 'number' : 'text',
+        value : item.value,
+        onchange : 'onItemChange(event)',
+        'data-type' : item.type,
+        'data-class' : what,
+        'data-value' : item.value,
+    });
+    if (item.type == "F" || item.type == "I")
+        input.attr({
+            min: item.min,
+            max: item.max
+        })
+    if (item.type == "F")
+        input.attr({step : "0.001" });
+    return input;
+}
+
+
 function fillTable(what,items)
     // what == 'pref' or 'topic'
     // fill the table#prefs_table or table#topics_table tbody
@@ -302,28 +344,49 @@ function fillTable(what,items)
     for (var i=0; i<items.length; i++)
     {
         var item = items[i];
-        var input = $('<input>').attr({
-            name : item.name,
-            id : what + "_" + item.name,
-            type : (item.type == "F" || item.type == "I") ? 'number' : 'text',
-            value : item.value,
-            onchange : 'onItemChange(event)',
-            'data-type' : item.type,
-            'data-class' : what,
-            'data-value' : item.value,
-        });
-        if (item.type == "F" || item.type == "I")
-            input.attr({
-                min: item.min,
-                max: item.max
-            })
-        if (item.type == "F")
-            input.attr({step : "0.001" });
+        var input = inputElement(item);
 
         $(table_id).append(
             $('<tr />').append(
               $('<td />').text(item.name),
               $('<td />').append(input) ));
+
+        if (item.dash)
+        {
+            var parts = item.dash.split(",");
+            var dbody = $('table#dashboard_table tbody');
+            for (var i=0; i<parts.length; i++)
+            {
+                var ele = 0;
+                var item_id = "";
+                var part = parts[i];
+                if (part == 'switch')
+                {
+                    item_id = "switch_" + item.name;
+                    var input = $('<input />')
+                        .addClass('form-check-input my_switch')
+                        .attr({
+                            id: item_id,
+                            type: 'checkbox',
+                            onchange:'switchChanged(event)' });
+                    ele = $('<div />').addClass('form-check form-switch my_switch')
+                        .append(input);
+                }
+                else if (part == 'input')
+                {
+                    ele = inputElement(item);
+                    item_id = ele.prop('id');
+                }
+
+                if (ele)
+                {
+                    dbody.append(
+                        $('<tr />').append(
+                            $('<td />').text(item_id),
+                            $('<td />').append(ele) ));
+                }
+            }
+        }
 
         if (what == "topic")
             handleTopicMsg(item.name,item.value);
@@ -408,13 +471,13 @@ function switchChanged(evt)
 {
     var cb = evt.target;
     var value = cb.checked ? "1" : "0";
-    var id = cb.id;
+    var id = cb.id.replace("switch_","");
     sendCommand("#" + id + "=" + value);
 }
 
 function handleTopicMsg(id,value)
 {
-    $('#'+id).prop('checked',value == "1");
+    $('#switch_'+id).prop('checked',value == "1");
     $("#topic_" + id).val(value);
 }
 

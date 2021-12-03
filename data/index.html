@@ -69,22 +69,24 @@
 
     <!-- dashboard tab -->
 
-    <table border=0 width='80%' align='center'>
-        <tr>
-            <td>bilgeAlarm/LED</td>
-            <td>
-                <div class="form-check form-switch my_switch">
-                    <input class="form-check-input my_switch" onchange="switchChanged(event)" type="checkbox" id="LED">
-                 </div>
-            </td>
-        </tr>
+    <table id='dashboard_table' width='90%' align='center'>
+        <tbody>
+            <!--tr>
+                <td>bilgeAlarm/LED</td>
+                <td>
+                    <div class="form-check form-switch my_switch">
+                        <input class="form-check-input my_switch" onchange="switchChanged(event)" type="checkbox" id="switch_LED">
+                     </div>
+                </td>
+            </tr-->
+        </tbody>
     </table>
 
     <!-- prefs and topic tabs -->
 
     </div>
     <div id="prefs" class="tab-pane fade" >
-        <table class='table' id='prefs_table'>
+        <table class='table' id='prefs_table' width='90%'>
             <thead>
                 <tr>
                     <th>Pref Name</th>
@@ -98,7 +100,7 @@
     </div>
 
     <div id="topics" class="tab-pane fade" >
-        <table class='table' id='topics_table'>
+        <table class='table' id='topics_table' width='90%'>
             <thead>
                 <tr>
                     <th>Topic Name</th>
