@@ -6,6 +6,8 @@
 #define BILGE_ALARM_VERSION "0.03"
 
 #define ONBOARD_LED             2
+#define OTHER_LED               26
+
 
 #define DEFAULT_DISABLED            0          // enabled,disabled
 #define DEFAULT_BACKLIGHT_SECS      0          // off,secs
@@ -31,7 +33,9 @@ const iotElement_t bilge_elements[] =
     { "EXTRA_RUN_MODE",   ELEMENT_CLASS_PREF,    ELEMENT_TYPE_INT,     NULL,            { .int_range = { DEFAULT_EXTRA_RUN_MODE, 0, 1}} },
     { "END_RUN_DELAY",    ELEMENT_CLASS_PREF,    ELEMENT_TYPE_INT,     NULL,            { .int_range = { DEFAULT_END_RUN_DELAY, 0, 255}} },
     { "RUN_EMERGENCY",    ELEMENT_CLASS_PREF,    ELEMENT_TYPE_FLOAT,   NULL,            { .float_range = {0, -1233.456, 1233.456}} },  // int_range = { DEFAULT_RUN_EMERGENCY, 0, 255}} },
-    { "LED",              ELEMENT_CLASS_TOPIC,   ELEMENT_TYPE_INT,     "switch,input",  { .int_range = { 0, 0, 1}} },
+    { "ONBOARD_LED",      ELEMENT_CLASS_TOPIC,   ELEMENT_TYPE_INT,     "switch,input",  { .int_range = { 0, 0, 1}} },
+    { "OTHER_LED",        ELEMENT_CLASS_TOPIC,   ELEMENT_TYPE_INT,     "switch,input",  { .int_range = { 0, 0, 1}} },
+
 };
 
 #define NUM_BILGE_ELEMENTS (sizeof(bilge_elements)/sizeof(iotElement_t))
@@ -44,8 +48,13 @@ public:
 
     bilgeAlarm()
     {
+        pinMode(ONBOARD_LED,OUTPUT);
+        pinMode(OTHER_LED,OUTPUT);
+        digitalWrite(ONBOARD_LED,0);
+        digitalWrite(OTHER_LED,0);
+        m_state_ONBOARD_LED = 0;
+        m_state_OTHER_LED = 0;
         addElements(bilge_elements,NUM_BILGE_ELEMENTS);
-        m_state_LED = 0;
     }
     ~bilgeAlarm() {}
 
@@ -60,10 +69,15 @@ public:
     {
         proc_entry();
         LOGD("bilgeAlarm::onTopicMsg(%s,%s)",topic.c_str(),msg.c_str());
-        if (topic == "LED")
+        if (topic == "ONBOARD_LED")
         {
-            m_state_LED = msg == "1" ? 1 : 0;
-            digitalWrite(ONBOARD_LED,m_state_LED);
+            m_state_ONBOARD_LED = msg == "1" ? 1 : 0;
+            digitalWrite(ONBOARD_LED,m_state_ONBOARD_LED);
+        }
+        else if (topic == "OTHER_LED")
+        {
+            m_state_OTHER_LED = msg == "1" ? 1 : 0;
+            digitalWrite(OTHER_LED,m_state_OTHER_LED);
         }
         else
             myIOTDevice::onTopicMsg(topic,msg);
@@ -72,12 +86,17 @@ public:
 
     virtual String getTopicState(String topic) override
     {
-        if (topic == "LED")
-            return String(m_state_LED);
+        if (topic == "ONBOARD_LED")
+            return String(m_state_ONBOARD_LED);
+        if (topic == "OTHER_LED")
+            return String(m_state_OTHER_LED);
         return myIOTDevice::getTopicState(topic);
     }
 
-    bool m_state_LED;
+private:
+
+    bool m_state_ONBOARD_LED;
+    bool m_state_OTHER_LED;
 };
 
 
@@ -92,9 +111,6 @@ void setup()
     LOGI("bilgeAlarm2.ino setup() started");
 
     proc_entry();
-
-    pinMode(ONBOARD_LED,OUTPUT);
-    digitalWrite(ONBOARD_LED,0);
 
     my_iot_device = bilge_alarm = new bilgeAlarm();
     my_iot_device->setup();

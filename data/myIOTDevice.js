@@ -355,11 +355,11 @@ function fillTable(what,items)
         {
             var parts = item.dash.split(",");
             var dbody = $('table#dashboard_table tbody');
-            for (var i=0; i<parts.length; i++)
+            for (var j=0; j<parts.length; j++)
             {
                 var ele = 0;
                 var item_id = "";
-                var part = parts[i];
+                var part = parts[j];
                 if (part == 'switch')
                 {
                     item_id = "switch_" + item.name;
