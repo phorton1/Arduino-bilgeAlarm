@@ -121,14 +121,14 @@
                     <th>
                         Name
                         <label htmlFor="spiffs_files">
-                            <button class='btn btn-secondary' onclick="onUploadClick()">upload</button>
+                            <button class='btn btn-secondary' onclick="onUploadClick('spiffs_files')">upload</button>
                         </label>
-                        <input type="file" multiple id="spiffs_files" onchange="uploadFiles('spiffs')" style="display:none"/>
+                        <input type="file" multiple id="spiffs_files" onchange="uploadFiles(event)" style="display:none"/>
 
                         <label htmlFor="ota_files">
-                            <button class='btn btn-secondary' onclick="onOTAClick()">OTA</button>
+                            <button class='btn btn-secondary' onclick="onUploadClick('ota_files')">OTA</button>
                         </label>
-                        <input type="file" id="ota_files" onchange="uploadFiles('ota')" style="display:none"/>
+                        <input type="file" id="ota_files" onchange="uploadFiles(event)" style="display:none"/>
                     </th>
                     <th id='spiffs_used'>Size</th>
                     <th id='spiffs_size'>&nbsp;</th>
