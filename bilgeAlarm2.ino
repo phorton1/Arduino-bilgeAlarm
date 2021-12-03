@@ -30,7 +30,7 @@ const iotElement_t bilge_elements[] =
     { "EXTRA_RUN_TIME",   ELEMENT_CLASS_PREF,    ELEMENT_TYPE_INT,     { .int_range = { DEFAULT_EXTRA_RUN_TIME, 0, 255}} },
     { "EXTRA_RUN_MODE",   ELEMENT_CLASS_PREF,    ELEMENT_TYPE_INT,     { .int_range = { DEFAULT_EXTRA_RUN_MODE, 0, 1}} },
     { "END_RUN_DELAY",    ELEMENT_CLASS_PREF,    ELEMENT_TYPE_INT,     { .int_range = { DEFAULT_END_RUN_DELAY, 0, 255}} },
-    { "RUN_EMERGENCY",    ELEMENT_CLASS_PREF,    ELEMENT_TYPE_INT,     { .int_range = { DEFAULT_RUN_EMERGENCY, 0, 255}} },
+    { "RUN_EMERGENCY",    ELEMENT_CLASS_PREF,    ELEMENT_TYPE_FLOAT,   { .float_range = {0, -1233.456, 1233.456}} },  // int_range = { DEFAULT_RUN_EMERGENCY, 0, 255}} },
     { "LED",              ELEMENT_CLASS_TOPIC,   ELEMENT_TYPE_INT,     { .int_range = { 0, 0, 1}} },
 };
 

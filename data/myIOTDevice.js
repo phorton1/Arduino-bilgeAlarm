@@ -217,10 +217,21 @@ function fillTable(what,items)  // what == 'pref' or 'topic'
     $(table_id).empty();
     for (var i=0; i<items.length; i++)
     {
+        var type = "text";
+        var min_max = "";
+
+        if (items[i].type == "F" || items[i].type == "I")
+        {
+            type = "number";
+            min_max = " min='" + items[i].min + "' max='" + items[i].max + "' ";
+            if (items[i].type == "F")
+                min_max += "step='0.001' ";   // prh 0.001?
+        }
         var id = what + "_" + items[i].name;
-        var input = "<input type='text' " +
+        var input = "<input type='" + type + "' " +
             "id='" + id + "' " +
             "value='" + items[i].value + "' " +
+            min_max +
             "onchange='onItemChange(event)'" +
             "'/>";
         $(table_id).append(
@@ -255,6 +266,19 @@ function handleWS(ws_event)
         if (parts.length==2)
         {
             handleTopicMsg(parts[0],parts[1]);
+            return;
+        }
+    }
+
+    // leaving this in, though it's not currently hit
+    else if (ws_msg.startsWith('$'))
+    {
+        var parts = ws_msg.substring(1).split("=");
+        if (parts.length==2)
+        {
+            var obj = document.getElementById('pref_' + parts[0]);
+            if (obj)
+                obj.value = parts[1];
             return;
         }
     }
@@ -379,13 +403,53 @@ function onItemChange(evt)
     var is_pref = id.startsWith("pref_");
     var name = is_pref ? id.substr(5) : id.substr(6);
     var ele = is_pref ? prefs[name] : topics[name];
+    var val = obj.value;
+        // dunno why, but val shows as "" in debugger, console etc,
+        // yet the regexes and tests below work ?!?
 
-    console.log("onItemChange(" + id + ") is_pref=" + is_pref + " name=" + name + " obj=" + obj + " type=" + ele.type);
+    console.log("onItemChange(" + id + ")=" + val +" is_pref=" + is_pref + " name=" + name + " type=" + ele.type);
 
-    var cmd = is_pref ? "$" : "#";
-    cmd += name + "=";
-    cmd += obj.value;
-    sendCommand(cmd);
+    // if (val != ele.value)
+    {
+        var ok = true;
+        console.log("    value changed");
+        if (ele.type == "I" || ele.type == "F")
+        {
+            if (ele.type == "I" && !val.match(/^-?\d+$/))
+            {
+                alert("illegal characters in integer: " + val);
+                ok = false;
+            }
+            else if (ele.type == "F" && !val.match(/^-?\d*\.?\d+$/))
+            {
+                alert("illegal characters in float: " + val);
+                ok = false;
+            }
+            if (val < ele.min ||
+                val > ele.max)
+            {
+                alert(name + "(" + val + ") out of range " + ele.min + "..." + ele.max);
+                ok = false;
+            }
+        }
+        if (ok)
+        {
+            if (ele.type == "F")
+            {
+                obj.value = parseFloat(val).toFixed(3);
+            }
+            ele.value = obj.value;
+            var cmd = is_pref ? "$" : "#";
+            cmd += name + "=";
+            cmd += obj.value;
+            sendCommand(cmd);
+        }
+        else
+        {
+            obj.value = ele.value;
+            obj.focus();
+        }
+    }
 }
 
 //------------------------------------------------
