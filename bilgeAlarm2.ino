@@ -103,12 +103,19 @@ private:
 
 bilgeAlarm *bilge_alarm = NULL;
 
+// #include <SD.h>
 
 void setup()
 {
     Serial.begin(115200);
     delay(1000);
+
     LOGI("bilgeAlarm2.ino setup() started");
+    #if 0
+        bool sd_ok = SD.begin(5);     // 5
+        LOGI("sd_ok=%d",sd_ok);
+    #endif
+
 
     proc_entry();
 
