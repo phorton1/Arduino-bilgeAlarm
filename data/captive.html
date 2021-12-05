@@ -285,7 +285,7 @@
             return;
         }
         var json = JSON.stringify({
-            cmd : "$ap/pass=" + p1 });
+            cmd : "$ap_pass=" + p1 });
         web_socket.send(json);
         // showState(1);
     }
@@ -295,10 +295,6 @@
     //--------------------------------------
     // checkers and status
     //--------------------------------------
-
-
-
-
 
     function startCaptive()
     {
