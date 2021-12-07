@@ -145,11 +145,14 @@ function uploadFiles(evt)
 //--------------------------------------
 
 
-function sendCommand(command)
+function sendCommand(command,params)
 {
+    var obj = params ? params : {};
+    obj["cmd"] = command;
+    var cmd = JSON.stringify(obj);
     if (debug_alive || !command.includes("ping"))
-        console.log("sendCommand(" + command + ")");
-    web_socket.send(JSON.stringify({cmd:command}));
+        console.log("sendCommand(" + command + ")=" + cmd);
+    web_socket.send(cmd);
 }
 
 
@@ -195,6 +198,7 @@ function openWebSocket()
         sendCommand("spiffs_list");
         sendCommand("prefs_list");
         sendCommand("topics_list");
+        sendCommand("get_chart_data");
     };
 
     web_socket.onclose = function(closeEvent)
@@ -261,6 +265,8 @@ function handleWS(ws_event)
             fillTable('pref',obj.prefs);
         if (obj.files)
             updateSPIFFSList(obj);
+        if (obj.chart)
+            updateChart(obj.chart);
 
         if (obj.upload_filename)
         {
@@ -500,9 +506,11 @@ function onUploadClick(id)
 }
 
 
+
 //------------------------------------------------
 // startMyIOT()
 //------------------------------------------------
+
 
 function startMyIOT()
 {
@@ -514,7 +522,11 @@ function startMyIOT()
 
     openWebSocket();
     setInterval(keepAlive,10000);
+
+    initChart();
 }
+
+
 
 
 window.onload = startMyIOT;

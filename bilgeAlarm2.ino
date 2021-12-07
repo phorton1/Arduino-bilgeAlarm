@@ -1,12 +1,18 @@
+#define INIT_SD_EARLY
 
 #include <myIOTDevice.h>
 #include <myIOTLog.h>
 #include <cstdlib>
 
+#ifdef INIT_SD_EARLY
+    #include <SD.h>
+#endif
+
 #define BILGE_ALARM_VERSION "0.03"
 
 #define ONBOARD_LED             2
-#define OTHER_LED               26
+#define OTHER_LED               13
+
 
 
 #define DEFAULT_DISABLED            0          // enabled,disabled
@@ -103,19 +109,17 @@ private:
 
 bilgeAlarm *bilge_alarm = NULL;
 
-// #include <SD.h>
-
 void setup()
 {
     Serial.begin(115200);
     delay(1000);
-
     LOGI("bilgeAlarm2.ino setup() started");
-    #if 0
+
+    #ifdef INIT_SD_EARLY
+        delay(200);
         bool sd_ok = SD.begin(5);     // 5
         LOGI("sd_ok=%d",sd_ok);
     #endif
-
 
     proc_entry();
 

@@ -5,11 +5,16 @@
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>myIOT Demo</title>
+
     <link href="bootstrap5.1.3.min.css" rel="stylesheet">
-    <link href="myIOTDevice.css" rel="stylesheet">
+    <link href="chartist.min.css" rel="stylesheet">
+    <link href="iotDevice.css" rel="stylesheet">
+
     <script src="jquery-3.6.0.min.js"></script>
     <script src="bootstrap5.1.3.bundle.min.js"></script>
-    <script src="myIOTDevice.js"></script>
+    <script src="chartist.min.js"></script>
+    <script src="iotChart.js"></script>
+    <script src="iotDevice.js"></script>
 </head>
 <body>
 
@@ -65,26 +70,31 @@
 
 
 <div id="my_tab_content" class="tab-content">
-    <div id="dashboard" class="tab-pane fade show active">
 
     <!-- dashboard tab -->
 
-    <table id='dashboard_table' width='90%' align='center'>
-        <tbody>
-            <!--tr>
-                <td>bilgeAlarm/LED</td>
-                <td>
-                    <div class="form-check form-switch my_switch">
-                        <input class="form-check-input my_switch" onchange="switchChanged(event)" type="checkbox" id="switch_LED">
-                     </div>
-                </td>
-            </tr-->
-        </tbody>
-    </table>
+    <div id="dashboard" class="tab-pane fade show active">
+        <table id='dashboard_table' width='90%' align='center'>
+            <tbody>
+                <!--tr>
+                    <td>bilgeAlarm/LED</td>
+                    <td>
+                        <div class="form-check form-switch my_switch">
+                            <input class="form-check-input my_switch" onchange="switchChanged(event)" type="checkbox" id="switch_LED">
+                         </div>
+                    </td>
+                </tr-->
+            </tbody>
+        </table>
+
+        <label htmlFor="chart_hours">Hours</label>
+        <input type="number" value='1' id='chart_hours'>
+        <button onclick='updateChartData()'>Update</button>
+        <div class="ct-chart ct-perfect-fourth"></div>
+    </div>
 
     <!-- prefs and topic tabs -->
 
-    </div>
     <div id="prefs" class="tab-pane fade" >
         <table class='table' id='prefs_table' width='90%'>
             <thead>
@@ -179,7 +189,6 @@
         </div>
    </div>
 </div>
-
 
 
 </body>
