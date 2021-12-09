@@ -14,6 +14,9 @@
 #define OTHER_LED               13
 
 
+//--------------------------------
+// bilgeAlarm definition
+//--------------------------------
 
 #define DEFAULT_DISABLED            0          // enabled,disabled
 #define DEFAULT_BACKLIGHT_SECS      0          // off,secs
@@ -107,6 +110,103 @@ private:
 
 
 
+//--------------------------------
+// power monitor
+//--------------------------------
+
+#include <esp_adc_cal.h>
+
+#define PIN_MAIN_VOLTAGE   35       //  3.3V == 18.5V
+#define PIN_MAIN_CURRENT   34       // Divide 0..5V to 0..2.5V   1024 = 0 Amps  2048=5A   0=-5A
+
+// calibration values at 12.5V
+// and approximate current consumption
+
+#define VOLT_CALIB_OFFSET  0.00     // 0.22
+#define AMP_CALIB_OFFSET   0.00     // -0.03
+
+#define VOLTAGE_DIVIDER_RATIO    ((4640.0 + 1003.0)/1003.0)       // (R1 + R2)/R2   ~5.6, so 3.3V==18.5V
+    // "4.72K" and "1K" == approx 3 ma through to ground at 12.5V
+#define CURRENT_DIVIDER_RATIO      ((9410.0 + 9410.0)/9410.0)       // (R1 + R2)/R2   ~2, so 3.3V==6.6V (we need 0..5)                                       ))
+    // negligble 0.263 ma current to ground
+
+#define CIRC_BUF_SIZE   100
+
+int volt_buf[CIRC_BUF_SIZE];
+int amp_buf[CIRC_BUF_SIZE];
+int volt_buf_num = 0;
+int amp_buf_num = 0;
+
+void powerTask(void *param)
+{
+    while (1)
+    {
+        vTaskDelay(10 / portTICK_PERIOD_MS);    // I believe this is vTaskDelay(1) = 10ms
+        volt_buf[volt_buf_num++] = analogRead(PIN_MAIN_VOLTAGE);
+        if (volt_buf_num >= CIRC_BUF_SIZE) volt_buf_num = 0;
+        amp_buf[amp_buf_num++] = analogRead(PIN_MAIN_CURRENT);
+        if (amp_buf_num >= CIRC_BUF_SIZE) amp_buf_num = 0;
+    }
+}
+
+
+
+float getActualVolts(int *buf)
+ {
+    int val = 0;
+    for (int i=0; i<CIRC_BUF_SIZE; i++)
+    {
+        val += buf[i];
+    }
+    val /= CIRC_BUF_SIZE;
+    esp_adc_cal_characteristics_t adc_chars;
+    esp_adc_cal_characterize(ADC_UNIT_1, ADC_ATTEN_DB_11, ADC_WIDTH_BIT_12, 1200, &adc_chars);
+        // prh dunno what it does, but it's way better than analogRead()/4096 * 3.3V
+        // The 1100 is from https://deepbluembedded.com/esp32-adc-tutorial-read-analog-voltage-arduino/
+        // The constant does not seem to do anything
+    uint32_t raw_millis = esp_adc_cal_raw_to_voltage(val, &adc_chars);
+    return (float) raw_millis/1000.0;
+}
+
+
+float getMainVoltage()
+{
+    float raw_volts = getActualVolts(volt_buf);
+    float undivided_volts = raw_volts * VOLTAGE_DIVIDER_RATIO;
+    float final_volts = undivided_volts + VOLT_CALIB_OFFSET;
+    #if 0
+        LOGD("MAIN    raw=%-1.3f   undiv=%-2.3f   final=%-2.3f",
+            raw_volts,
+            undivided_volts,
+            final_volts);
+    #endif
+    return final_volts;
+}
+
+float getMainCurrent()
+{
+    float raw_volts = getActualVolts(amp_buf);
+    float undivided_volts = raw_volts * CURRENT_DIVIDER_RATIO;
+    float biased_volts = undivided_volts - 2.5;
+    float current = (biased_volts/2.5) * 5.0;
+    float final_current = current + AMP_CALIB_OFFSET;
+    #if 0
+        LOGD("CURRENT raw=%-1.3f   undiv=%-2.3f   biased=%-2.3f   amps=%-2.3f   final=%-2.3f",
+            raw_volts,
+            undivided_volts,
+            biased_volts,
+            current,
+            final_current);
+    #endif
+    return final_current;
+}
+
+
+
+//--------------------------------
+// main
+//--------------------------------
+
 bilgeAlarm *bilge_alarm = NULL;
 
 void setup()
@@ -114,6 +214,9 @@ void setup()
     Serial.begin(115200);
     delay(1000);
     LOGI("bilgeAlarm2.ino setup() started");
+
+    pinMode(PIN_MAIN_VOLTAGE, INPUT);
+    pinMode(PIN_MAIN_CURRENT, INPUT);
 
     #ifdef INIT_SD_EARLY
         delay(200);
@@ -130,6 +233,14 @@ void setup()
          my_iot_device->getFriendlyName().c_str(),
          BILGE_ALARM_VERSION,
          IOT_DEVICE_VERSION);
+
+    LOGD("starting powerTask");
+    xTaskCreate(powerTask,
+        "powerTask",
+        2048,
+        NULL,   // param
+        1,  	// priority
+        NULL);  // *handle
 
     proc_leave();
     LOGI("bilgeAlarm2.ino setup() finished",0);
@@ -167,4 +278,35 @@ void loop()
     #endif
 
     my_iot_device->loop();
+
+    static bool led_state = 0;
+    static uint32_t toggle_led = 0;
+    uint32_t now = millis();
+
+    if (now > toggle_led + 1000)
+    {
+        toggle_led = now;
+        led_state = !led_state;
+        digitalWrite(ONBOARD_LED,led_state);
+    }
+
+    static uint32_t check_time =0;
+    if (now > check_time + 1000)
+    {
+        check_time = now;
+        float main_volts = getMainVoltage();
+        float main_amps = getMainCurrent();
+        String msg = "{\"power_volts\":";
+        msg += String(main_volts,2);
+        msg += ",\"power_amps\":";
+        msg += String(main_amps,3);
+        msg += "}";
+        my_iot_device->wsBroadcast(msg.c_str());
+
+        #if 0
+            LOGD("POWER %0.2fV %0.3fA",main_volts,main_amps);
+        #endif
+    }
+
+
 }

@@ -198,7 +198,7 @@ function openWebSocket()
         sendCommand("spiffs_list");
         sendCommand("prefs_list");
         sendCommand("topics_list");
-        sendCommand("get_chart_data");
+        // sendCommand("get_chart_data");
     };
 
     web_socket.onclose = function(closeEvent)
@@ -215,7 +215,9 @@ function openWebSocket()
 function handleWS(ws_event)
 {
     var ws_msg = ws_event.data;
-    if (debug_alive || !ws_msg.includes("pong"))
+    if (!ws_msg.includes("log_msg") &&
+        !ws_msg.includes("power_volts") &&
+       (debug_alive || !ws_msg.includes("pong")))
         console.log("WebSocket MESSAGE: " + ws_msg);
 
     // topucs and prefs do not go through json
@@ -267,6 +269,12 @@ function handleWS(ws_event)
             updateSPIFFSList(obj);
         if (obj.chart)
             updateChart(obj.chart);
+        if (obj.log_msg)
+            console.log(obj.log_msg);
+        if (obj.power_volts)
+            $('#power_volts').html(obj.power_volts.toFixed(2));
+        if (obj.power_amps)
+            $('#power_amps').html(obj.power_amps.toFixed(3));
 
         if (obj.upload_filename)
         {
@@ -523,7 +531,7 @@ function startMyIOT()
     openWebSocket();
     setInterval(keepAlive,10000);
 
-    initChart();
+    // initChart();
 }
 
 

@@ -74,6 +74,17 @@
     <!-- dashboard tab -->
 
     <div id="dashboard" class="tab-pane fade show active">
+
+        <table width='90%' align='center'>
+            <tr>
+                <td>Volts</td>
+                <th><span id="power_volts">&nbsp;</span> V</th>
+            </tr>
+            <tr>
+                <td>Amps</td>
+                <th><span id="power_amps">&nbsp;</span> A</th>
+            </tr>
+        </table>
         <table id='dashboard_table' width='90%' align='center'>
             <tbody>
                 <!--tr>
@@ -87,10 +98,11 @@
             </tbody>
         </table>
 
-        <label htmlFor="chart_hours">Hours</label>
+        <!--label htmlFor="chart_hours">Hours</label>
         <input type="number" value='1' id='chart_hours'>
         <button onclick='updateChartData()'>Update</button>
-        <div class="ct-chart ct-perfect-fourth"></div>
+        <div class="ct-chart ct-perfect-fourth"></div-->
+
     </div>
 
     <!-- prefs and topic tabs -->
