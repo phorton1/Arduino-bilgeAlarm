@@ -8,7 +8,7 @@
     #include <SD.h>
 #endif
 
-#define BILGE_ALARM_VERSION "0.03"
+#define BILGE_ALARM_VERSION "0.02"
 
 #define ONBOARD_LED             2
 #define OTHER_LED               13
@@ -116,6 +116,8 @@ private:
 
 #include <esp_adc_cal.h>
 
+// #define DEBUG_POWER
+
 #define PIN_MAIN_VOLTAGE   35       //  3.3V == 18.5V
 #define PIN_MAIN_CURRENT   34       // Divide 0..5V to 0..2.5V   1024 = 0 Amps  2048=5A   0=-5A
 
@@ -123,7 +125,7 @@ private:
 // and approximate current consumption
 
 #define VOLT_CALIB_OFFSET  0.00     // 0.22
-#define AMP_CALIB_OFFSET   0.00     // -0.03
+#define AMP_CALIB_OFFSET   0.025     // -0.03
 
 #define VOLTAGE_DIVIDER_RATIO    ((4640.0 + 1003.0)/1003.0)       // (R1 + R2)/R2   ~5.6, so 3.3V==18.5V
     // "4.72K" and "1K" == approx 3 ma through to ground at 12.5V
@@ -174,7 +176,7 @@ float getMainVoltage()
     float raw_volts = getActualVolts(volt_buf);
     float undivided_volts = raw_volts * VOLTAGE_DIVIDER_RATIO;
     float final_volts = undivided_volts + VOLT_CALIB_OFFSET;
-    #if 0
+    #ifdef DEBUG_POWER
         LOGD("MAIN    raw=%-1.3f   undiv=%-2.3f   final=%-2.3f",
             raw_volts,
             undivided_volts,
@@ -190,7 +192,7 @@ float getMainCurrent()
     float biased_volts = undivided_volts - 2.5;
     float current = (biased_volts/2.5) * 5.0;
     float final_current = current + AMP_CALIB_OFFSET;
-    #if 0
+    #ifdef DEBUG_POWER
         LOGD("CURRENT raw=%-1.3f   undiv=%-2.3f   biased=%-2.3f   amps=%-2.3f   final=%-2.3f",
             raw_volts,
             undivided_volts,
@@ -290,23 +292,25 @@ void loop()
         digitalWrite(ONBOARD_LED,led_state);
     }
 
-    static uint32_t check_time =0;
-    if (now > check_time + 1000)
+    if (my_iot_device->getConnectStatus() == IOT_CONNECT_STA)
     {
-        check_time = now;
-        float main_volts = getMainVoltage();
-        float main_amps = getMainCurrent();
-        String msg = "{\"power_volts\":";
-        msg += String(main_volts,2);
-        msg += ",\"power_amps\":";
-        msg += String(main_amps,3);
-        msg += "}";
-        my_iot_device->wsBroadcast(msg.c_str());
+        static uint32_t check_time =0;
+        if (now > check_time + 1000)
+        {
+            check_time = now;
+            float main_volts = getMainVoltage();
+            float main_amps = getMainCurrent();
+            String msg = "{\"power_volts\":";
+            msg += String(main_volts,2);
+            msg += ",\"power_amps\":";
+            msg += String(main_amps,3);
+            msg += "}";
+            my_iot_device->wsBroadcast(msg.c_str());
 
-        #if 0
-            LOGD("POWER %0.2fV %0.3fA",main_volts,main_amps);
-        #endif
+            #if 0
+                LOGD("POWER %0.2fV %0.3fA",main_volts,main_amps);
+            #endif
+        }
     }
-
 
 }

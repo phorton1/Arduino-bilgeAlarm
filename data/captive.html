@@ -174,7 +174,7 @@
 
     function setObjHTML(obj,thing)
     {
-        if (typeof obj[thing] != undefined)
+        if (typeof(obj[thing]) != "undefined")
             document.getElementById(thing).innerHTML = obj[thing];
     }
 
@@ -285,7 +285,8 @@
             return;
         }
         var json = JSON.stringify({
-            cmd : "$ap_pass=" + p1 });
+            cmd : "set_ap_pass",
+            psk : p1 });
         web_socket.send(json);
         // showState(1);
     }
@@ -354,10 +355,19 @@
                     setObjHTML(obj,'iot_setup');
                     setObjHTML(obj,'sta_gateway');
 
-                    if (obj.iot_setup && show_state == 0)
-                        showState(1);
-                    else if (show_state && !obj.iot_setup)
-                        showState(0);
+                    if (obj.ap_ssid && !device_name)
+                    {
+                        device_name = obj.ap_ssid;
+                        document.title = device_name;
+                    }
+
+                    if (typeof(obj.iot_setup) != "undefined")
+                    {
+                        if (obj.iot_setup && show_state == 0)
+                            showState(1);
+                        else if (show_state && !obj.iot_setup)
+                            showState(0);
+                    }
                 }
             }
             else
