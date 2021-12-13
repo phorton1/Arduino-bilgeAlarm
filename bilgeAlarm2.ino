@@ -62,7 +62,7 @@ private:
 
     static void onLed(const myIOTValue *desc, bool val);
 
-public:
+// public:
 
     static bool m_ONBOARD_LED;
     static bool m_OTHER_LED;
@@ -138,7 +138,7 @@ bilgeAlarm::bilgeAlarm()
 void bilgeAlarm::onLed(const myIOTValue *value, bool val)
 {
     String id = value->getId();
-    LOGD("onLed(%s,%d)",id.c_str(),val);
+    // LOGD("onLed(%s,%d)",id.c_str(),val);
 
     if (id == ID_ONBOARD_LED)
     {

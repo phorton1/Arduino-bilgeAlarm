@@ -1,3 +1,4 @@
+// prh - might be useful to have a watchdog that reloads the page every so often
 
 // constants that agree with C++ code
 
@@ -296,8 +297,10 @@ function handleWS(ws_event)
 function updateSPIFFSList(obj)
 {
     $('table#filemanager tbody').empty();
+
     $('#spiffs_used').html(fileKB(obj.used) + " used");
     $('#spiffs_size').html("of " + fileKB(obj.total) + " total");
+
     for (var i=0; i<obj.files.length; i++)
     {
         var file = obj.files[i];
