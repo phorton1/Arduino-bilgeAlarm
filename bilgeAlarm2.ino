@@ -8,7 +8,7 @@
     #include <SD.h>
 #endif
 
-#define BILGE_ALARM_VERSION "0.02"
+#define BILGE_ALARM_VERSION "0.05"
 
 #define ONBOARD_LED             2
 #define OTHER_LED               13
@@ -66,7 +66,7 @@ private:
 
     static bool m_ONBOARD_LED;
     static bool m_OTHER_LED;
-
+    static bool m_DEMO_MODE;
 
 };
 
@@ -100,7 +100,7 @@ private:
 #define ID_RUN_EMERGENCY    "RUN_EMERGENCY"
 #define ID_ONBOARD_LED      "ONBOARD_LED"
 #define ID_OTHER_LED        "OTHER_LED"
-
+#define ID_DEMO_MODE        "DEMO_MODE"
 
 const valDescriptor bilgeAlarm::m_bilge_values[] =
 {
@@ -115,8 +115,9 @@ const valDescriptor bilgeAlarm::m_bilge_values[] =
     { ID_EXTRA_RUN_MODE,   VALUE_TYPE_INT,      VALUE_LOC_PREF,     VALUE_STYLE_NONE,   NULL,                   NULL,           { .int_range = { DEFAULT_EXTRA_RUN_MODE, 0, 1}} },
     { ID_END_RUN_DELAY,    VALUE_TYPE_INT,      VALUE_LOC_PREF,     VALUE_STYLE_NONE,   NULL,                   NULL,           { .int_range = { DEFAULT_END_RUN_DELAY, 0, 255}} },
     { ID_RUN_EMERGENCY,    VALUE_TYPE_FLOAT,    VALUE_LOC_PREF,     VALUE_STYLE_NONE,   NULL,                   NULL,           { .float_range = {0, -1233.456, 1233.456}} },  // int_range = { DEFAULT_RUN_EMERGENCY, 0, 255}} },
-    { ID_ONBOARD_LED,      VALUE_TYPE_BOOL,     VALUE_LOC_TOPIC,    VALUE_STYLE_SWITCH, (void *) &m_ONBOARD_LED,(void *) onLed, { .int_range = { 0, 0, 1}} },
-    { ID_OTHER_LED,        VALUE_TYPE_BOOL,     VALUE_LOC_TOPIC,    VALUE_STYLE_SWITCH, (void *) &m_OTHER_LED,  (void *) onLed, { .int_range = { 0, 0, 1}} },
+    { ID_ONBOARD_LED,      VALUE_TYPE_BOOL,     VALUE_LOC_TOPIC,    VALUE_STYLE_SWITCH, (void *) &m_ONBOARD_LED,(void *) onLed, },
+    { ID_OTHER_LED,        VALUE_TYPE_BOOL,     VALUE_LOC_TOPIC,    VALUE_STYLE_SWITCH, (void *) &m_OTHER_LED,  (void *) onLed, },
+    { ID_DEMO_MODE,        VALUE_TYPE_BOOL,     VALUE_LOC_PREF,     VALUE_STYLE_SWITCH, (void *) &m_DEMO_MODE,  NULL,           },
 };
 
 #define NUM_BILGE_VALUES (sizeof(m_bilge_values)/sizeof(valDescriptor))
@@ -124,6 +125,7 @@ const valDescriptor bilgeAlarm::m_bilge_values[] =
 
 bool bilgeAlarm::m_ONBOARD_LED = 0;
 bool bilgeAlarm::m_OTHER_LED = 0;
+bool bilgeAlarm::m_DEMO_MODE = 0;
 
 bilgeAlarm::bilgeAlarm()
 {
@@ -195,13 +197,16 @@ void loop()
     my_iot_device->loop();
 
     #if 1
-        uint32_t now = millis();
-        static uint32_t toggle_led = 0;
-        if (now > toggle_led + 5000)
+        if (my_iot_device->getBool(ID_DEMO_MODE))
         {
-            toggle_led = now;
-            bool led_state = my_iot_device->getBool(ID_ONBOARD_LED);
-            my_iot_device->setBool(ID_ONBOARD_LED,!led_state);  // !bilgeAlarm::m_ONBOARD_LED);
+            uint32_t now = millis();
+            static uint32_t toggle_led = 0;
+            if (now > toggle_led + 2000)
+            {
+                toggle_led = now;
+                bool led_state = my_iot_device->getBool(ID_ONBOARD_LED);
+                my_iot_device->setBool(ID_ONBOARD_LED,!led_state);  // !bilgeAlarm::m_ONBOARD_LED);
+            }
         }
     #endif
 }

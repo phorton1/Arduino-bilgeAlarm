@@ -8,6 +8,7 @@ const VALUE_TYPE_CHAR    = 'C';        // a single character
 const VALUE_TYPE_STRING  = 'S';        // a string
 const VALUE_TYPE_INT     = 'I';        // a signed 32 bit integer
 const VALUE_TYPE_FLOAT   = 'F';        // a float
+const VALUE_TYPE_ENUM    = 'E';        // a enumerated integer
 
 const VALUE_LOC_PROG     = 0x00;      // only in ESP32 memory
 const VALUE_LOC_NVS      = 0x01;      // stored/retrieved from NVS
@@ -335,9 +336,34 @@ function addOutput(body,item)
 }
 
 
+
+function addSelect(body,item)
+{
+    var input = $('<select>').addClass(item.id).attr({
+        name : item.id,
+        onchange : 'onValueChange(event)',
+        'data-type' : item.type,
+        'data-value' : item.value
+    });
+
+    var options = item.allowed.split(",");
+    for (var i=0; i<options.length; i++)
+        input.append($("<option>").attr('value',options[i]).text(options[i]));
+    input.val(item.value);
+
+    body.append(
+         $('<tr />').append(
+          $('<td />').text(item.id),
+          $('<td />').append(input) ));
+}
+
+
 function addInput(body,item)
     // inputs know their 'name' is equal to the item.id
 {
+    if (item.type == VALUE_TYPE_ENUM)
+        return addSelect(body,item);
+
     var is_bool = item.type == VALUE_TYPE_BOOL;
     var is_number =
         is_bool ||
@@ -349,6 +375,7 @@ function addInput(body,item)
         (item.style & VALUE_STYLE_PASSWORD) ? 'password' :
         is_number ? 'number' :
         'text'
+
     input.attr({
         name : item.id,
         type : input_type,
@@ -365,6 +392,7 @@ function addInput(body,item)
         })
     if (item.type == VALUE_TYPE_FLOAT)
         input.attr({step : "0.001" });
+
     body.append(
          $('<tr />').append(
           $('<td />').text(item.id),
@@ -382,7 +410,7 @@ function addSwitch(body,item)
             name: item.id,
             type: 'checkbox',
             onchange:'onSwitch(event)' });
-    input.checked = item.value;
+    input.prop('checked',item.value);
     var ele = $('<div />').addClass('form-check form-switch my_switch')
         .append(input);
     body.append(
