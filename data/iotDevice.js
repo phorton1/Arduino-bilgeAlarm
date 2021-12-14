@@ -27,6 +27,7 @@ const VALUE_STYLE_INPUT    = 0x0002;      // displayed as input field
 const VALUE_STYLE_BUTTON   = 0x0010;      // displayed as a button
 const VALUE_STYLE_SWITCH   = 0x0020;      // displayed as a switch
 const VALUE_STYLE_VERIFY   = 0x0040;      // verify a button press
+const VALUE_STYLE_REQUIRED = 0x0100;      // item may not be blank
 const VALUE_STYLE_PASSWORD = 0x0800;      // displayed as '********', protected in debugging, etc
 
 // program vars
@@ -382,8 +383,12 @@ function addInput(body,item)
         value : item.value,
         onchange : 'onValueChange(event)',
         'data-type' : item.type,
-        'data-value' : item.value
+        'data-value' : item.value,
+        'data-style' : item.style
     });
+
+    if (item.style & VALUE_STYLE_REQUIRED)
+        input.attr("required",true);
 
     if (is_number)
         input.attr({
@@ -497,17 +502,26 @@ function onSwitch(evt)
     sendCommand("set",{ "id":name, "value":value });
 }
 
+
+
 function onValueChange(evt)
 {
     var obj = evt.target;
-    var type = obj.getAttribute('data-type');
-    var name = obj.getAttribute('name');
     var value = obj.value;
+    var name = obj.getAttribute('name');
+    var type = obj.getAttribute('data-type');
+    var style = obj.getAttribute('data-style');
 
     console.log("onItemChange(" + name + ":" + type +")=" + value);
 
     var ok = true;
-    if (type == VALUE_TYPE_INT || type == VALUE_TYPE_FLOAT)
+
+    if ((style & VALUE_STYLE_REQUIRED) && String(value)=="")
+    {
+        alert("Value must be entered");
+        ok = false;
+    }
+    else if (type == VALUE_TYPE_INT || type == VALUE_TYPE_FLOAT)
     {
         var min = obj.getAttribute('min');
         var max = obj.getAttribute('max');
@@ -535,6 +549,8 @@ function onValueChange(evt)
             ok = false;
         }
     }
+
+
     if (ok)
     {
         if (type == VALUE_TYPE_FLOAT)
@@ -545,7 +561,43 @@ function onValueChange(evt)
     else
     {
         obj.value = obj.getAttribute('data-value');
-        obj.focus();
+
+        // GRRR - what I want to do is put the focus back on the
+        // element.   Onchange() occurs on a tab key, mouse click,
+        // button, etc.   If they click on another field, it will
+        // receive the focus, no matter what happens.
+        //
+        // The following, refocus the object after 1 ms, SORT OF
+        // works.   But if they click on another field, then BOTH
+        // FIELDS are shown as focused by firefox.
+        //
+        // I tried everything to get rid of the "other" focus,
+        //      $(':focus').blur();
+        //      document.activeElement.blur();
+        //      window.blur()
+        // preventDefault() and stopPropogate() on the event,
+        // and even cascading setTimeouts (one for blur, one for focus)
+        // but could not get reasonable behavior.
+        //
+        // Sheesh, it's not like anyone would ever want to do field level
+        // validation based on the onChangeEvent!!
+        //
+        // Isn't this what everyone would try out of the gate?
+        // The only other thought I have is keboard validation, but
+        // then you have issues with cut-copy-paste, etc.
+        //
+        // And its NOT A FORM so there is no "form validation", which
+        // is what HTML seems to base all of it's "auto-validation" upon.
+        //
+        // GRRR again.
+
+        setTimeout( function() {
+                // setTimeout( function() {
+                    obj.focus();
+                // },1);
+            }, 1);
+        // evt.stopPropagation();
+        // evt.preventDefault();
     }
 }
 
