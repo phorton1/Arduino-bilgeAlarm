@@ -27,38 +27,6 @@ public:
 
     virtual const char *getVersion() override  { return BILGE_ALARM_VERSION; }
 
-    #ifdef WITH_MQTT
-        virtual void onTopicMsg(String topic, String msg) override
-        {
-            // proc_entry();
-            // LOGD("bilgeAlarm::onTopicMsg(%s,%s)",topic.c_str(),msg.c_str());
-            // if (topic == "ONBOARD_LED")
-            // {
-            //     m_state_ONBOARD_LED = msg == "1" ? 1 : 0;
-            //     digitalWrite(ONBOARD_LED,m_state_ONBOARD_LED);
-            // }
-            // else if (topic == "OTHER_LED")
-            // {
-            //     m_state_OTHER_LED = msg == "1" ? 1 : 0;
-            //     digitalWrite(OTHER_LED,m_state_OTHER_LED);
-            // }
-            // else
-            //     myIOTDevice::onTopicMsg(topic,msg);
-            // proc_leave();
-        }
-
-        virtual String getTopicState(String topic) override
-        {
-            return "";
-            // if (topic == "ONBOARD_LED")
-            //     return String(m_state_ONBOARD_LED);
-            // if (topic == "OTHER_LED")
-            //     return String(m_state_OTHER_LED);
-            // return myIOTDevice::getTopicState(topic);
-        }
-    #endif
-
-
 private:
 
     static const valDescriptor m_bilge_values[];
@@ -104,6 +72,19 @@ private:
 #define ID_ONBOARD_LED      "ONBOARD_LED"
 #define ID_OTHER_LED        "OTHER_LED"
 #define ID_DEMO_MODE        "DEMO_MODE"
+
+
+#define RETAINED_SWITCH    (VALUE_STYLE_SWITCH | VALUE_STYLE_RETAIN)
+    // CAREFUL with the use of MQTT retained messages!!
+    // They can only be cleared on the rpi with:
+    //
+    //      sudo service mosquitto stop
+    //      sudo rm /var/lib/mosquitto/mosquitto.db
+    //      sudo service mosquitto start
+    //
+    // or individually with
+    //
+    //      mosquitto_pub -u myIOTClient -P 1234 -h localhost -t bilgeAlarm/ONBOARD_LED -n -r -d
 
 const valDescriptor bilgeAlarm::m_bilge_values[] =
 {
