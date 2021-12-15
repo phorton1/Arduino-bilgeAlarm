@@ -1,11 +1,14 @@
-#define INIT_SD_EARLY
+
 
 #include <myIOTDevice.h>
 #include <myIOTLog.h>
 #include <cstdlib>
 
-#ifdef INIT_SD_EARLY
-    #include <SD.h>
+#ifdef WITH_SD
+    #define INIT_SD_EARLY
+    #ifdef INIT_SD_EARLY
+        #include <SD.h>
+    #endif
 #endif
 
 #define BILGE_ALARM_VERSION "0.05"
@@ -170,10 +173,12 @@ void setup()
     pinMode(PIN_MAIN_VOLTAGE, INPUT);
     pinMode(PIN_MAIN_CURRENT, INPUT);
 
+    #ifdef WITH_SD
     #ifdef INIT_SD_EARLY
         delay(200);
         bool sd_ok = SD.begin(5);     // 5
         LOGI("sd_ok=%d",sd_ok);
+    #endif
     #endif
 
     proc_entry();
