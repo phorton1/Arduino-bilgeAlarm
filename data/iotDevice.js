@@ -364,6 +364,8 @@ function addInput(body,item)
 {
     if (item.type == VALUE_TYPE_ENUM)
         return addSelect(body,item);
+    if (item.type == VALUE_TYPE_COMMAND)
+        return addButton(body,item);
 
     var is_bool = item.type == VALUE_TYPE_BOOL;
     var is_number =
@@ -406,8 +408,6 @@ function addInput(body,item)
 
 
 function addSwitch(body,item)
-    // switches know their 'name' is equal to the item.id
-    // and contain the "my_switch" class
 {
     var input = $('<input />')
         .addClass('form-check-input my_switch ' + item.id)
@@ -429,7 +429,6 @@ function addSwitch(body,item)
 function addButton(body,item)
 {
     var button = $('<button />')
-        // .addClass('form-check-input my_switch')
         .attr({
             id: item.id,
             'data-verify' : (item.style & VALUE_STYLE_VERIFY ? true : false),
