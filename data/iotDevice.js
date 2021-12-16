@@ -10,16 +10,16 @@ const VALUE_TYPE_INT     = 'I';        // a signed 32 bit integer
 const VALUE_TYPE_FLOAT   = 'F';        // a float
 const VALUE_TYPE_ENUM    = 'E';        // a enumerated integer
 
-const VALUE_LOC_PROG     = 0x00;      // only in ESP32 memory
-const VALUE_LOC_NVS      = 0x01;      // stored/retrieved from NVS
-const VALUE_LOC_WS       = 0x02;      // broadcast to / received from WebSockets
-const VALUE_LOC_MQTT_PUB = 0x04;      // published/subscribed to on (the) MQTT broker
-const VALUE_LOC_MQTT_SUB = 0x08;      // published/subscribed to on (the) MQTT broker
-const VALUE_LOC_DATA     = 0x10;      // history stored/retrieved from SD database
-const VALUE_LOC_SERIAL   = 0x40;
+const VALUE_STORE_PROG     = 0x00;      // only in ESP32 memory
+const VALUE_STORE_NVS      = 0x01;      // stored/retrieved from NVS
+const VALUE_STORE_WS       = 0x02;      // broadcast to / received from WebSockets
+const VALUE_STORE_MQTT_PUB = 0x04;      // published/subscribed to on (the) MQTT broker
+const VALUE_STORE_MQTT_SUB = 0x08;      // published/subscribed to on (the) MQTT broker
+const VALUE_STORE_DATA     = 0x10;      // history stored/retrieved from SD database
+const VALUE_STORE_SERIAL   = 0x40;
 
-const VALUE_LOC_PREF     = (VALUE_LOC_NVS | VALUE_LOC_WS);
-const VALUE_LOC_TOPIC    = (VALUE_LOC_MQTT_PUB | VALUE_LOC_MQTT_SUB);
+const VALUE_STORE_PREF     = (VALUE_STORE_NVS | VALUE_STORE_WS);
+const VALUE_STORE_TOPIC    = (VALUE_STORE_MQTT_PUB | VALUE_STORE_MQTT_SUB);
 
 const VALUE_STYLE_NONE     = 0x0000;      // not displayed in dashboard
 const VALUE_STYLE_OUTPUT   = 0x0001;      // displayed as text span
@@ -456,9 +456,9 @@ function fillTables(items)
     {
         var item = items[i];
 
-        if (item.loc & VALUE_LOC_NVS)
+        if (item.store & VALUE_STORE_NVS)
             addInput(pbody,item);
-        if (item.loc & VALUE_LOC_TOPIC)
+        if (item.store & VALUE_STORE_TOPIC)
             addInput(tbody,item);
 
         if (item.style & VALUE_STYLE_OUTPUT)
