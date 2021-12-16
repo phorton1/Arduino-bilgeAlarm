@@ -11,7 +11,7 @@
     #endif
 #endif
 
-#define BILGE_ALARM_VERSION "0.05"
+#define BILGE_ALARM_VERSION "bilgeAlarm 0.05"
 
 #define ONBOARD_LED             2
 #define OTHER_LED               13
@@ -74,22 +74,35 @@ private:
 #define ID_DEMO_MODE        "DEMO_MODE"
 
 
-#define RETAINED_SWITCH    (VALUE_STYLE_SWITCH | VALUE_STYLE_RETAIN)
-    // CAREFUL with the use of MQTT retained messages!!
-    // They can only be cleared on the rpi with:
-    //
-    //      sudo service mosquitto stop
-    //      sudo rm /var/lib/mosquitto/mosquitto.db
-    //      sudo service mosquitto start
-    //
-    // or individually with
-    //
-    //      mosquitto_pub -u myIOTClient -P 1234 -h localhost -t bilgeAlarm/ONBOARD_LED -n -r -d
+static valueIdType dash_items[] = {
+    ID_DEVICE_VOLTS,
+    ID_DEVICE_AMPS,
+    ID_ONBOARD_LED,
+    ID_OTHER_LED,
+    ID_DEMO_MODE,
+    ID_REBOOT,
+    0
+};
+
+static valueIdType device_items[] = {
+    ID_DEMO_MODE,
+    ID_DISABLED,
+    ID_BACKLIGHT_SECS,
+    ID_ERR_RUN_TIME,
+    ID_CRIT_RUN_TIME,
+    ID_ERR_PER_HOUR,
+    ID_ERR_PER_DAY,
+    ID_EXTRA_RUN_TIME,
+    ID_EXTRA_RUN_MODE,
+    ID_END_RUN_DELAY,
+    ID_RUN_EMERGENCY,
+    0
+};
 
 const valDescriptor bilgeAlarm::m_bilge_values[] =
 {
     { ID_DEVICE_NAME,      VALUE_TYPE_STRING,   VALUE_STORE_PREF,     VALUE_STYLE_REQUIRED,   NULL,                   NULL,           "bilgeAlarm" },        // override base class element
-    { ID_DISABLED,         VALUE_TYPE_INT,      VALUE_STORE_PREF,     VALUE_STYLE_NONE,       NULL,                   NULL,           { .int_range = { DEFAULT_DISABLED, 0, 1}} },
+    { ID_DISABLED,         VALUE_TYPE_BOOL,     VALUE_STORE_PREF,     VALUE_STYLE_NONE,       NULL,                   NULL,           { .int_range = { DEFAULT_DISABLED, 0, 1}} },
     { ID_BACKLIGHT_SECS,   VALUE_TYPE_INT,      VALUE_STORE_PREF,     VALUE_STYLE_NONE,       NULL,                   NULL,           { .int_range = { DEFAULT_BACKLIGHT_SECS, 0, 255}} },
     { ID_ERR_RUN_TIME,     VALUE_TYPE_INT,      VALUE_STORE_PREF,     VALUE_STYLE_NONE,       NULL,                   NULL,           { .int_range = { DEFAULT_ERR_RUN_TIME, 0, 255}} },
     { ID_CRIT_RUN_TIME,    VALUE_TYPE_INT,      VALUE_STORE_PREF,     VALUE_STYLE_NONE,       NULL,                   NULL,           { .int_range = { DEFAULT_CRIT_RUN_TIME, 0, 255}} },
@@ -99,17 +112,19 @@ const valDescriptor bilgeAlarm::m_bilge_values[] =
     { ID_EXTRA_RUN_MODE,   VALUE_TYPE_INT,      VALUE_STORE_PREF,     VALUE_STYLE_NONE,       NULL,                   NULL,           { .int_range = { DEFAULT_EXTRA_RUN_MODE, 0, 1}} },
     { ID_END_RUN_DELAY,    VALUE_TYPE_INT,      VALUE_STORE_PREF,     VALUE_STYLE_NONE,       NULL,                   NULL,           { .int_range = { DEFAULT_END_RUN_DELAY, 0, 255}} },
     { ID_RUN_EMERGENCY,    VALUE_TYPE_FLOAT,    VALUE_STORE_PREF,     VALUE_STYLE_NONE,       NULL,                   NULL,           { .float_range = {0, -1233.456, 1233.456}} },  // int_range = { DEFAULT_RUN_EMERGENCY, 0, 255}} },
-    { ID_ONBOARD_LED,      VALUE_TYPE_BOOL,     VALUE_STORE_TOPIC,    VALUE_STYLE_SWITCH,     (void *) &m_ONBOARD_LED,(void *) onLed, },
-    { ID_OTHER_LED,        VALUE_TYPE_BOOL,     VALUE_STORE_TOPIC,    VALUE_STYLE_SWITCH,     (void *) &m_OTHER_LED,  (void *) onLed, },
-    { ID_DEMO_MODE,        VALUE_TYPE_BOOL,     VALUE_STORE_PREF,     VALUE_STYLE_SWITCH,     (void *) &m_DEMO_MODE,  NULL,           },
+    { ID_ONBOARD_LED,      VALUE_TYPE_BOOL,     VALUE_STORE_TOPIC,    VALUE_STYLE_NONE,       (void *) &m_ONBOARD_LED,(void *) onLed, },
+    { ID_OTHER_LED,        VALUE_TYPE_BOOL,     VALUE_STORE_TOPIC,    VALUE_STYLE_NONE,       (void *) &m_OTHER_LED,  (void *) onLed, },
+    { ID_DEMO_MODE,        VALUE_TYPE_BOOL,     VALUE_STORE_PREF,     VALUE_STYLE_NONE,       (void *) &m_DEMO_MODE,  NULL,           },
 };
 
 #define NUM_BILGE_VALUES (sizeof(m_bilge_values)/sizeof(valDescriptor))
 
 
+
 bool bilgeAlarm::m_ONBOARD_LED = 0;
 bool bilgeAlarm::m_OTHER_LED = 0;
 bool bilgeAlarm::m_DEMO_MODE = 0;
+
 
 bilgeAlarm::bilgeAlarm()
 {
@@ -118,6 +133,7 @@ bilgeAlarm::bilgeAlarm()
     digitalWrite(ONBOARD_LED,0);
     digitalWrite(OTHER_LED,0);
     addValues(m_bilge_values,NUM_BILGE_VALUES);
+    setTabLayouts(dash_items,device_items);
 }
 
 

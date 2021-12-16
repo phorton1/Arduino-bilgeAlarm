@@ -21,14 +21,17 @@ const VALUE_STORE_SERIAL   = 0x40;
 const VALUE_STORE_PREF     = (VALUE_STORE_NVS | VALUE_STORE_WS);
 const VALUE_STORE_TOPIC    = (VALUE_STORE_MQTT_PUB | VALUE_STORE_MQTT_SUB);
 
-const VALUE_STYLE_NONE     = 0x0000;      // not displayed in dashboard
-const VALUE_STYLE_OUTPUT   = 0x0001;      // displayed as text span
-const VALUE_STYLE_INPUT    = 0x0002;      // displayed as input field
-const VALUE_STYLE_BUTTON   = 0x0010;      // displayed as a button
-const VALUE_STYLE_SWITCH   = 0x0020;      // displayed as a switch
-const VALUE_STYLE_VERIFY   = 0x0040;      // verify a button press
-const VALUE_STYLE_REQUIRED = 0x0100;      // item may not be blank
-const VALUE_STYLE_PASSWORD = 0x0800;      // displayed as '********', protected in debugging, etc
+const VALUE_TAB_SYSTEM     = 0x01;
+const VALUE_TAB_DEVICE     = 0x02;
+const VALUE_TAB_DASH       = 0x04;
+
+const VALUE_STYLE_NONE     = 0x0000;      // no special styling
+const VALUE_STYLE_READONLY = 0x0001;      // Value may not be modified
+const VALUE_STYLE_REQUIRED = 0x0002;      // String item may not be blank
+const VALUE_STYLE_PASSWORD = 0x0004;      // displayed as '********', protected in debugging, etc. Gets "retype" dialog in UI
+const VALUE_STYLE_RETAIN   = 0x0010;      // MQTT if published, will be "retained"
+const VALUE_STYLE_VERIFY   = 0x0100;      // UI buttons will display a confirm dialog
+
 
 // program vars
 
@@ -215,8 +218,8 @@ function handleWS(ws_event)
 {
     var ws_msg = ws_event.data;
     if (!ws_msg.includes("log_msg") &&
-        !ws_msg.includes("DEVICE_AMPS") &&
-        !ws_msg.includes("DEVICE_VOLTS") &&
+        !(ws_msg.includes("set") && ws_msg.includes("DEVICE_AMPS")) &&
+        !(ws_msg.includes("set") && ws_msg.includes("DEVICE_VOLTS")) &&
         (debug_alive || !ws_msg.includes("pong")))
         console.log("WebSocket MESSAGE: " + ws_msg);
 
@@ -259,12 +262,8 @@ function handleWS(ws_event)
             document.title = obj.device_name;
             $('#my_brand').html(obj.device_name);
         }
-        if (obj.version)
-            $('#my_version').html(obj.version);
-        if (obj.iot_version)
-            $('#iot_version').html(obj.iot_version);
         if (obj.values)
-            fillTables(obj.values);
+            fillTables(obj);
         if (obj.files)
             updateSPIFFSList(obj);
 
@@ -325,20 +324,7 @@ function updateSPIFFSList(obj)
 
 
 
-function addOutput(body,item)
-    // outputs are only colleced by class==item.id
-{
-    var output = $('<span>').addClass(item.id);
-    output.html(item.value);
-    body.append(
-         $('<tr />').append(
-          $('<td />').text(item.id),
-          $('<td />').append(output) ));
-}
-
-
-
-function addSelect(body,item)
+function addSelect(item)
 {
     var input = $('<select>').addClass(item.id).attr({
         name : item.id,
@@ -351,46 +337,34 @@ function addSelect(body,item)
     for (var i=0; i<options.length; i++)
         input.append($("<option>").attr('value',options[i]).text(options[i]));
     input.val(item.value);
-
-    body.append(
-         $('<tr />').append(
-          $('<td />').text(item.id),
-          $('<td />').append(input) ));
+    return input;
 }
 
 
-function addInput(body,item)
+function addInput(item)
     // inputs know their 'name' is equal to the item.id
 {
-    if (item.type == VALUE_TYPE_ENUM)
-        return addSelect(body,item);
-    if (item.type == VALUE_TYPE_COMMAND)
-        return addButton(body,item);
-
     var is_bool = item.type == VALUE_TYPE_BOOL;
     var is_number =
         is_bool ||
         item.type == VALUE_TYPE_INT ||
         item.type == VALUE_TYPE_FLOAT;
-
-    var input = $('<input>').addClass(item.id);
     var input_type =
         (item.style & VALUE_STYLE_PASSWORD) ? 'password' :
         is_number ? 'number' :
         'text'
 
-    input.attr({
-        name : item.id,
-        type : input_type,
-        value : item.value,
-        onchange : 'onValueChange(event)',
-        'data-type' : item.type,
-        'data-value' : item.value,
-        'data-style' : item.style
-    });
-
-    if (item.style & VALUE_STYLE_REQUIRED)
-        input.attr("required",true);
+    var input = $('<input>')
+        .addClass(item.id)
+        .attr({
+            name : item.id,
+            type : input_type,
+            value : item.value,
+            onchange : 'onValueChange(event)',
+            'data-type' : item.type,
+            'data-value' : item.value,
+            'data-style' : item.style
+        });
 
     if (is_number)
         input.attr({
@@ -399,15 +373,11 @@ function addInput(body,item)
         })
     if (item.type == VALUE_TYPE_FLOAT)
         input.attr({step : "0.001" });
-
-    body.append(
-         $('<tr />').append(
-          $('<td />').text(item.id),
-          $('<td />').append(input) ));
+    return input;
 }
 
 
-function addSwitch(body,item)
+function addSwitch(item)
 {
     var input = $('<input />')
         .addClass('form-check-input my_switch ' + item.id)
@@ -416,60 +386,78 @@ function addSwitch(body,item)
             type: 'checkbox',
             onchange:'onSwitch(event)' });
     input.prop('checked',item.value);
-    var ele = $('<div />').addClass('form-check form-switch my_switch')
+    var ele = $('<div />')
+        .addClass('form-check form-switch my_switch')
         .append(input);
-    body.append(
+    return ele;
+}
+
+
+function addOutput(item)
+    // outputs are only colleced by class==item.id
+{
+    return $('<span>')
+        .addClass(item.id)
+        .html(item.value);
+}
+
+
+function addButton(item)
+{
+    return $('<button />')
+        .attr({
+            id: item.id,
+            'data-verify' : (item.style & VALUE_STYLE_VERIFY ? true : false),
+            onclick:'onButton(event)' })
+        .html(item.id);
+}
+
+
+function addItem(tbody,item)
+{
+    var ele;
+
+    if (item.type == VALUE_TYPE_COMMAND)
+        ele = addButton(item);
+    else if (item.style & VALUE_STYLE_READONLY)
+        ele = addOutput(item);
+    else if (item.type == VALUE_TYPE_BOOL)
+        ele = addSwitch(item);
+    else if (item.type == VALUE_TYPE_ENUM)
+        ele = addSelect(item);
+    else
+        ele = addInput(item);
+
+    tbody.append(
         $('<tr />').append(
             $('<td />').text(item.id),
             $('<td />').append(ele) ));
 }
 
 
-
-function addButton(body,item)
+function fillTable(values,ids,tbody)
+    // prh - should hide empty tabs
 {
-    var button = $('<button />')
-        .attr({
-            id: item.id,
-            'data-verify' : (item.style & VALUE_STYLE_VERIFY ? true : false),
-            onclick:'onButton(event)' })
-        .html(item.id);
+    tbody.empty();
+    if (!ids)
+        return;
+    ids.forEach(function (id) {
+        var item = values[id];
+        if (item)
+            addItem(tbody,item);
+        else
+            alert("Uknown item_id in fillTable " + tbody.id + ": " + id);
 
-    body.append(
-        $('<tr />').append(
-            $('<td />').text(item.id),
-            $('<td />').append(button) ));
+    });
 }
 
 
-function fillTables(items)
-    // fill the prefs, topics, and dashboard tables from the element list
+function fillTables(obj)
+    // fill the prefs, topics, and dashboard tables from the value list
 {
-    var pbody = $('table#prefs_table tbody')
-    var tbody = $('table#topics_table tbody');
-    var dbody = $('table#dashboard_table tbody');
-    pbody.empty();
-    tbody.empty();
-    dbody.empty();
-
-    for (var i=0; i<items.length; i++)
-    {
-        var item = items[i];
-
-        if (item.store & VALUE_STORE_NVS)
-            addInput(pbody,item);
-        if (item.store & VALUE_STORE_TOPIC)
-            addInput(tbody,item);
-
-        if (item.style & VALUE_STYLE_OUTPUT)
-            addOutput(dbody,item);
-        if (item.style & VALUE_STYLE_INPUT)
-            addInput(dbody,item);
-        if (item.style & VALUE_STYLE_SWITCH)
-            addSwitch(dbody,item);
-        if (item.style & VALUE_STYLE_BUTTON)
-            addButton(dbody,item);
-    }
+    fillTable(obj.values,obj.system_items,$('table#system_table tbody'));
+    fillTable(obj.values,obj.device_items,$('table#device_table tbody'));
+    fillTable(obj.values,obj.dash_items,$('table#dashboard_table tbody'));
 }
 
 
