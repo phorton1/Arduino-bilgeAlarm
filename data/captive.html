@@ -141,14 +141,12 @@
 
 <script type="text/javascript">
 
-
     var show_state = -1;
-
     var device_name;
     var connect_ssid;
-
     var iot_check_counter = 0;
     var web_socket;
+    var debug_wifi = 0;
 
 
     function setHTMLById(id,html)
@@ -299,6 +297,9 @@
 
     function startCaptive()
     {
+        if (debug_wifi)
+            document.getElementById('debug_wifi').addClass('shown');
+
         setInterval(function () {
                 setHTMLById("host_status",location.host);
                 setHTMLById("browser_status",window.navigator.onLine ? "onLine" : "not onLine");
@@ -355,6 +356,9 @@
                     setObjHTML(obj,'iot_setup');
                     setObjHTML(obj,'sta_gateway');
 
+                    if (obj.sta_ip)
+                        setHTMLById('connect_ip',obj.sta_ip);
+
                     if (obj.ap_ssid && !device_name)
                     {
                         device_name = obj.ap_ssid;
@@ -383,9 +387,9 @@
 
 <body>
 <table border='0'><tr><td valign='top'>
-
+<td>
     <br><br>
-    <table width='320px' border='0'>
+    <table id="debug_wifi" width='320px' border='0' class='hidden'>
         <tr><td width='100px'>Browser</td><td id='browser_status'></td></tr>
         <tr><td>Host</td><td id='host_status'></td></tr>
         <tr><td>&nbsp;</td><td>&nbsp;</td></tr>
@@ -432,7 +436,8 @@
         <h2>
             <font color='blue'><span id='device_name'>Device</span></font>
             is connected to
-            <font color='blue'><span id='connect_ssid'>SSID</span></font>
+            <font color='blue'><span id='connect_ssid'>SSID</span></font> at <br>
+            <b><span id='connect_ip'>&nbsp;</span></b><br>
             <br>You may close this window
         </h2>
         </center>

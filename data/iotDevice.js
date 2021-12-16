@@ -29,8 +29,8 @@ const VALUE_STYLE_NONE     = 0x0000;      // no special styling
 const VALUE_STYLE_READONLY = 0x0001;      // Value may not be modified
 const VALUE_STYLE_REQUIRED = 0x0002;      // String item may not be blank
 const VALUE_STYLE_PASSWORD = 0x0004;      // displayed as '********', protected in debugging, etc. Gets "retype" dialog in UI
-const VALUE_STYLE_RETAIN   = 0x0010;      // MQTT if published, will be "retained"
-const VALUE_STYLE_VERIFY   = 0x0100;      // UI buttons will display a confirm dialog
+const VALUE_STYLE_VERIFY   = 0x0010;      // UI buttons will display a confirm dialog
+const VALUE_STYLE_RETAIN   = 0x0100;      // MQTT if published, will be "retained"
 
 
 // program vars

@@ -1,8 +1,8 @@
-
-
+//-----------------------------------
+// bilgeAlarm2.ino
+//-----------------------------------
 #include <myIOTDevice.h>
 #include <myIOTLog.h>
-#include <cstdlib>
 
 #ifdef WITH_SD
     #define INIT_SD_EARLY
@@ -11,11 +11,9 @@
     #endif
 #endif
 
-#define BILGE_ALARM_VERSION "bilgeAlarm 0.05"
 
 #define ONBOARD_LED             2
 #define OTHER_LED               13
-
 
 
 class bilgeAlarm : public myIOTDevice
@@ -25,15 +23,13 @@ public:
     bilgeAlarm();
     ~bilgeAlarm() {}
 
-    virtual const char *getVersion() override  { return BILGE_ALARM_VERSION; }
+    virtual const char *getVersion() override  { return "bilgeAlarm 0.05"; }
 
 private:
 
     static const valDescriptor m_bilge_values[];
 
     static void onLed(const myIOTValue *desc, bool val);
-
-// public:
 
     static bool m_ONBOARD_LED;
     static bool m_OTHER_LED;
@@ -140,8 +136,6 @@ bilgeAlarm::bilgeAlarm()
 void bilgeAlarm::onLed(const myIOTValue *value, bool val)
 {
     String id = value->getId();
-    // LOGD("onLed(%s,%d)",id.c_str(),val);
-
     if (id == ID_ONBOARD_LED)
     {
         digitalWrite(ONBOARD_LED,val);
@@ -185,7 +179,7 @@ void setup()
 
     LOGI("%s version=%s IOTVersion=%s",
          my_iot_device->getName().c_str(),
-         BILGE_ALARM_VERSION,
+         my_iot_device->getVersion(),
          IOT_DEVICE_VERSION);
 
     proc_leave();
@@ -207,7 +201,7 @@ void loop()
             {
                 toggle_led = now;
                 bool led_state = my_iot_device->getBool(ID_ONBOARD_LED);
-                my_iot_device->setBool(ID_ONBOARD_LED,!led_state);  // !bilgeAlarm::m_ONBOARD_LED);
+                my_iot_device->setBool(ID_ONBOARD_LED,!led_state);
             }
         }
     #endif
