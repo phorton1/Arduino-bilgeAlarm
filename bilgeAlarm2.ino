@@ -23,7 +23,7 @@ public:
     bilgeAlarm();
     ~bilgeAlarm() {}
 
-    virtual const char *getVersion() override  { return "bilgeAlarm 0.05"; }
+    virtual const char *getVersion() override  { return "b0.05"; }
 
 private:
 
