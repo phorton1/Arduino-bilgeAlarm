@@ -1,5 +1,5 @@
 //-----------------------------------
-// bilgeAlarm2.ino
+// bilgeAlarm.ino
 //-----------------------------------
 #include "bilgeAlarm.h"
 #include <myIOTLog.h>
@@ -25,7 +25,7 @@ void setup()
     bilge_alarm = new bilgeAlarm();
     bilge_alarm->init();
 
-    LOGU("bilgeAlarm2.ino setup() started");
+    LOGU("bilgeAlarm.ino setup() started");
 
     #ifdef WITH_SD
     #ifdef INIT_SD_EARLY
@@ -42,7 +42,7 @@ void setup()
          bilge_alarm->getVersion(),
          IOT_DEVICE_VERSION);
 
-    LOGU("bilgeAlarm2.ino setup() finished",0);
+    LOGU("bilgeAlarm.ino setup() finished",0);
 }
 
 
