@@ -30,6 +30,7 @@ const VALUE_STYLE_READONLY = 0x0001;      // Value may not be modified
 const VALUE_STYLE_REQUIRED = 0x0002;      // String item may not be blank
 const VALUE_STYLE_PASSWORD = 0x0004;      // displayed as '********', protected in debugging, etc. Gets "retype" dialog in UI
 const VALUE_STYLE_VERIFY   = 0x0010;      // UI buttons will display a confirm dialog
+const VALUE_STYLE_LONG     = 0x0020;      // UI will show a long (rather than default 15ish) String Input Control
 const VALUE_STYLE_RETAIN   = 0x0100;      // MQTT if published, will be "retained"
 
 
@@ -191,7 +192,13 @@ function openWebSocket()
 
     $('#ws_status').html("Web Socket " + ws_connect_count + " CLOSED");
 
-    web_socket = new WebSocket('ws://' + location.host + ':81');
+    // allow for extracting the port+1 from ports other than default 80
+
+    var port = location.port;
+    if (port == '')
+        port = '80';
+    var url = 'ws://' + location.hostname + ':' + (parseInt(port) + 1);
+    web_socket = new WebSocket(url);
 
     web_socket.onopen = function(event)
     {
@@ -366,6 +373,9 @@ function addInput(item)
             'data-style' : item.style
         });
 
+    if (item.style & VALUE_STYLE_LONG)
+        input.attr({size:80});
+
     if (is_number)
         input.attr({
             min: is_bool ? 0 : item.min,
@@ -475,9 +485,12 @@ function onButton(evt)
 {
     var obj = evt.target;
     var id = obj.getAttribute('id');
-    if (obj.getAttribute('data-verify') &&
-        !window.confirm("Ard you sure you want to " + id + "?"))
-        return;
+    var verify = obj.getAttribute('data-verify');
+    if (verify == 'true')   // weird that this is a string
+    {
+        if (!window.confirm("Ard you sure you want to " + id + "?"))
+            return;
+    }
     sendCommand("invoke",{"id":id});
 }
 
