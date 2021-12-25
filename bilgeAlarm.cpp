@@ -7,8 +7,14 @@
 #include <Wire.h>
 #include <LiquidCrystal_I2C.h>
 
+#define DEBUG_STATES  1
+#define DEBUG_ALARM   0
+
+
 #define LCD_LINE_LEN   16
 
+#define BUTTON_CHECK_TIME  30
+#define UI_UPDATE_TIME     30
 
 //--------------------------------
 // bilgeAlarm definition
@@ -16,26 +22,38 @@
 
 #define DEFAULT_DISABLED            0          // enabled,disabled
 #define DEFAULT_BACKLIGHT_SECS      0          // off,secs
+
 #define DEFAULT_ERR_RUN_TIME        10         // off,secs
 #define DEFAULT_CRIT_RUN_TIME       30         // off,secs
 #define DEFAULT_ERR_PER_HOUR        2          // off,num
 #define DEFAULT_ERR_PER_DAY         12         // off,secs
+
 #define DEFAULT_EXTRA_RUN_TIME      5          // off,secs
-#define DEFAULT_EXTRA_RUN_MODE      1          // start, end, if primary_time
-#define DEFAULT_END_RUN_DELAY       2          // secs if mode=='end' and time != 0
-#define DEFAULT_RUN_EMERGENCY       30         // 255
+#define DEFAULT_EXTRA_RUN_MODE      1          // at_start, after_end
+#define DEFAULT_EXTRA_RUN_DELAY     1000       // millis after pump goes off to start after_end
+
+#define DEFAULT_SENSE_MILLIS        30         // millis - how often to read the sensors
+#define DEFAULT_PUMP_DEBOUNCE       500        // millis to debounce the pump switches
+#define DEFAULT_RELAY_DEBOUNCE      2000       // millis - how long after the relay goes off before we read the pump switch again
+
+#define DEFAULT_RUN_EMERGENCY       30         // off,secs
+
+
 
 
 static valueIdType dash_items[] = {
     ID_STATE,
     ID_ALARM_STATE,
+    ID_SUPPRESS,
+    ID_CLEAR_ERROR,
+    ID_DISABLED,
     ID_LCD_LINE1,
     ID_LCD_LINE2,
 #ifdef WITH_POWER
     ID_DEVICE_VOLTS,
     ID_DEVICE_AMPS,
 #endif
-    ID_RELAY,
+    ID_FORCE_RELAY,
     ID_ONBOARD_LED,
     ID_OTHER_LED,
     ID_DEMO_MODE,
@@ -51,66 +69,157 @@ static valueIdType device_items[] = {
     ID_CRIT_RUN_TIME,
     ID_ERR_PER_HOUR,
     ID_ERR_PER_DAY,
+    ID_RUN_EMERGENCY,
     ID_EXTRA_RUN_TIME,
     ID_EXTRA_RUN_MODE,
-    ID_END_RUN_DELAY,
-    ID_RUN_EMERGENCY,
+    ID_EXTRA_RUN_DELAY,
+    ID_SENSE_MILLIS,
+    ID_PUMP_DEBOUNCE,
+    ID_RELAY_DEBOUNCE,
     0
 };
 
+#define STATE_PUMP1_ON             0x0001       // the regular pump switch is on
+#define STATE_PUMP2_ON             0x0002       // the emergency pump switch is on
+#define STATE_RELAY_ON             0x0004       // the relay is on
 
-static enumValue alarmStates[] = {"ERROR","CRITICAL","EMERGENCY","SUPRESSED",0};
-static enumValue systemStates[] = {"PUMP_ON","RELAY_ON","FORCE_ON","RELAY_EMERGENCY","EMERGENCY_RUN","EMERGENCY_ON","TOO_OFTEN_HOUR","TOO_OFTEN_DAY","TOO_LONG","CRIT_LONG",0};
+// error states
+
+#define STATE_EMERGENCY            0x0008       // the emergency pump switch was turned on
+#define STATE_TOO_OFTEN_HOUR       0x0010       // error detected
+#define STATE_TOO_OFTEN_DAY        0x0020       // error detected
+#define STATE_TOO_LONG             0x0040       // error detected
+#define STATE_CRITICAL_TOO_LONG    0x0080       // critical error detected
+
+// relay on states
+
+#define STATE_RELAY_FORCED          0x0100      // the relay was forced on or off by the user
+#define STATE_RELAY_EMERGENCY       0x0200      // the relay is on due to the ID_RUN_EMERGENCY value
+#define STATE_RELAY_EXTRA           0x0400      // the relay is on due to the ID_EXTRA_RUN_TIME value
+
+static enumValue alarmStates[] = {"ERROR","CRITICAL","EMERGENCY","SUPPRESSED",0};
+static enumValue systemStates[] = {"PUMP1_ON","PUMP2_ON","RELAY_ON","EMERGENCY","TOO_OFTEN_HOUR","TOO_OFTEN_DAY","TOO_LONG","CRIT_LONG","RELAY_FORCED","RELAY_EMERGENCY","RELAY_EXTRA"};
 
 
 const valDescriptor bilgeAlarm::m_bilge_values[] =
 {
-    { ID_DEVICE_NAME,      VALUE_TYPE_STRING,   VALUE_STORE_PREF,     VALUE_STYLE_REQUIRED,   NULL,                   NULL,           "bilgeAlarm" },        // override base class element
+    { ID_DEVICE_NAME,      VALUE_TYPE_STRING,   VALUE_STORE_PREF,     VALUE_STYLE_REQUIRED,   NULL,                     NULL,   "bilgeAlarm" },        // override base class element
 
-    { ID_STATE,            VALUE_TYPE_BENUM,    VALUE_STORE_TOPIC,    VALUE_STYLE_READONLY,   (void *) &m_state,      NULL,   { .enum_range = { 4, systemStates }} },
-    { ID_ALARM_STATE,      VALUE_TYPE_BENUM,    VALUE_STORE_TOPIC,    VALUE_STYLE_NONE,       (void *) &m_alarm_state,NULL,   { .enum_range = { 4, alarmStates }} },
+    { ID_STATE,            VALUE_TYPE_BENUM,    VALUE_STORE_TOPIC,    VALUE_STYLE_READONLY,   (void *) &_state,         NULL,   { .enum_range = { 4, systemStates }} },
+    { ID_ALARM_STATE,      VALUE_TYPE_BENUM,    VALUE_STORE_TOPIC,    VALUE_STYLE_LONG,       (void *) &_alarm_state,   NULL,   { .enum_range = { 4, alarmStates }} },
 
-    { ID_RELAY,            VALUE_TYPE_BOOL,     VALUE_STORE_TOPIC,    VALUE_STYLE_NONE,       (void *) &m_RELAY,      (void *)onRelay },
+    { ID_FORCE_RELAY,      VALUE_TYPE_BOOL,     VALUE_STORE_TOPIC,    VALUE_STYLE_NONE,       (void *) &_FORCE_RELAY,   (void *) onForceRelay },
+    { ID_SUPPRESS,         VALUE_TYPE_COMMAND,  VALUE_STORE_MQTT_SUB, VALUE_STYLE_NONE,       NULL,                     (void *) suppressError },
+    { ID_CLEAR_ERROR,      VALUE_TYPE_COMMAND,  VALUE_STORE_MQTT_SUB, VALUE_STYLE_NONE,       NULL,                     (void *) clearError },
+    { ID_DISABLED,         VALUE_TYPE_BOOL,     VALUE_STORE_PREF,     VALUE_STYLE_NONE,       (void *) &_disabled,      (void *) onDisabled,   { .int_range = { DEFAULT_DISABLED, 0, 1}} },
 
-    { ID_DISABLED,         VALUE_TYPE_BOOL,     VALUE_STORE_PREF,     VALUE_STYLE_NONE,       NULL,                   NULL,           { .int_range = { DEFAULT_DISABLED, 0, 1}} },
-    { ID_BACKLIGHT_SECS,   VALUE_TYPE_INT,      VALUE_STORE_PREF,     VALUE_STYLE_NONE,       NULL,                   NULL,           { .int_range = { DEFAULT_BACKLIGHT_SECS, 0, 255}} },
-    { ID_ERR_RUN_TIME,     VALUE_TYPE_INT,      VALUE_STORE_PREF,     VALUE_STYLE_NONE,       NULL,                   NULL,           { .int_range = { DEFAULT_ERR_RUN_TIME, 0, 255}} },
-    { ID_CRIT_RUN_TIME,    VALUE_TYPE_INT,      VALUE_STORE_PREF,     VALUE_STYLE_NONE,       NULL,                   NULL,           { .int_range = { DEFAULT_CRIT_RUN_TIME, 0, 255}} },
-    { ID_ERR_PER_HOUR,     VALUE_TYPE_INT,      VALUE_STORE_PREF,     VALUE_STYLE_NONE,       NULL,                   NULL,           { .int_range = { DEFAULT_ERR_PER_HOUR, 0, 255}} },
-    { ID_ERR_PER_DAY,      VALUE_TYPE_INT,      VALUE_STORE_PREF,     VALUE_STYLE_NONE,       NULL,                   NULL,           { .int_range = { DEFAULT_ERR_PER_DAY, 0, 255}} },
-    { ID_EXTRA_RUN_TIME,   VALUE_TYPE_INT,      VALUE_STORE_PREF,     VALUE_STYLE_NONE,       NULL,                   NULL,           { .int_range = { DEFAULT_EXTRA_RUN_TIME, 0, 255}} },
-    { ID_EXTRA_RUN_MODE,   VALUE_TYPE_INT,      VALUE_STORE_PREF,     VALUE_STYLE_NONE,       NULL,                   NULL,           { .int_range = { DEFAULT_EXTRA_RUN_MODE, 0, 1}} },
-    { ID_END_RUN_DELAY,    VALUE_TYPE_INT,      VALUE_STORE_PREF,     VALUE_STYLE_NONE,       NULL,                   NULL,           { .int_range = { DEFAULT_END_RUN_DELAY, 0, 255}} },
-    { ID_RUN_EMERGENCY,    VALUE_TYPE_FLOAT,    VALUE_STORE_PREF,     VALUE_STYLE_NONE,       NULL,                   NULL,           { .float_range = {0, -1233.456, 1233.456}} },  // int_range = { DEFAULT_RUN_EMERGENCY, 0, 255}} },
+    { ID_BACKLIGHT_SECS,   VALUE_TYPE_INT,      VALUE_STORE_PREF,     VALUE_STYLE_NONE,       (void *) &_backlight_secs, NULL,  { .int_range = { DEFAULT_BACKLIGHT_SECS,    0,  255}}   },
+    { ID_ERR_RUN_TIME,     VALUE_TYPE_INT,      VALUE_STORE_PREF,     VALUE_STYLE_NONE,       (void *) &_err_run_time,   NULL,  { .int_range = { DEFAULT_ERR_RUN_TIME,      0,  255}}   },
+    { ID_CRIT_RUN_TIME,    VALUE_TYPE_INT,      VALUE_STORE_PREF,     VALUE_STYLE_NONE,       (void *) &_crit_run_time,  NULL,  { .int_range = { DEFAULT_CRIT_RUN_TIME,     0,  255}}   },
+    { ID_ERR_PER_HOUR,     VALUE_TYPE_INT,      VALUE_STORE_PREF,     VALUE_STYLE_NONE,       (void *) &_err_per_hour,   NULL,  { .int_range = { DEFAULT_ERR_PER_HOUR,      0,  255}}   },
+    { ID_ERR_PER_DAY,      VALUE_TYPE_INT,      VALUE_STORE_PREF,     VALUE_STYLE_NONE,       (void *) &_err_per_day,    NULL,  { .int_range = { DEFAULT_ERR_PER_DAY,       0,  255}}   },
+    { ID_RUN_EMERGENCY,    VALUE_TYPE_INT,      VALUE_STORE_PREF,     VALUE_STYLE_NONE,       (void *) &_run_emergency,  NULL,  { .int_range = { DEFAULT_RUN_EMERGENCY,     0,  255}}   },
+    { ID_EXTRA_RUN_TIME,   VALUE_TYPE_INT,      VALUE_STORE_PREF,     VALUE_STYLE_NONE,       (void *) &_extra_run_time, NULL,  { .int_range = { DEFAULT_EXTRA_RUN_TIME,    0,  255}}   },
+    { ID_EXTRA_RUN_MODE,   VALUE_TYPE_INT,      VALUE_STORE_PREF,     VALUE_STYLE_NONE,       (void *) &_extra_run_mode, NULL,  { .int_range = { DEFAULT_EXTRA_RUN_MODE,    0,  1}}     },
+    { ID_EXTRA_RUN_DELAY,  VALUE_TYPE_INT,      VALUE_STORE_PREF,     VALUE_STYLE_NONE,       (void *) &_extra_run_delay,NULL,  { .int_range = { DEFAULT_EXTRA_RUN_DELAY,   5,  30000}} },
+    { ID_SENSE_MILLIS,     VALUE_TYPE_INT,      VALUE_STORE_PREF,     VALUE_STYLE_NONE,       (void *) &_sense_millis,   NULL,  { .int_range = { DEFAULT_SENSE_MILLIS,      5,  30000}} },
+    { ID_PUMP_DEBOUNCE,    VALUE_TYPE_INT,      VALUE_STORE_PREF,     VALUE_STYLE_NONE,       (void *) &_pump_debounce,  NULL,  { .int_range = { DEFAULT_PUMP_DEBOUNCE,     5,  30000}} },
+    { ID_RELAY_DEBOUNCE,   VALUE_TYPE_INT,      VALUE_STORE_PREF,     VALUE_STYLE_NONE,       (void *) &_relay_debounce, NULL,  { .int_range = { DEFAULT_RELAY_DEBOUNCE,    5,  30000}} },
 
-    { ID_LCD_LINE1,        VALUE_TYPE_STRING,   VALUE_STORE_TOPIC,    VALUE_STYLE_NONE,       (void *) &m_lcd_line1,  (void *) onLcdLine },
-    { ID_LCD_LINE2,        VALUE_TYPE_STRING,   VALUE_STORE_TOPIC,    VALUE_STYLE_NONE,       (void *) &m_lcd_line2,  (void *) onLcdLine },
+    { ID_LCD_LINE1,        VALUE_TYPE_STRING,   VALUE_STORE_TOPIC,    VALUE_STYLE_LONG,       (void *) &_lcd_line1,      (void *) onLcdLine },
+    { ID_LCD_LINE2,        VALUE_TYPE_STRING,   VALUE_STORE_TOPIC,    VALUE_STYLE_LONG,       (void *) &_lcd_line2,      (void *) onLcdLine },
 
-    { ID_ONBOARD_LED,      VALUE_TYPE_BOOL,     VALUE_STORE_TOPIC,    VALUE_STYLE_NONE,       (void *) &m_ONBOARD_LED,(void *) onLed, },
-    { ID_OTHER_LED,        VALUE_TYPE_BOOL,     VALUE_STORE_TOPIC,    VALUE_STYLE_NONE,       (void *) &m_OTHER_LED,  (void *) onLed, },
-    { ID_DEMO_MODE,        VALUE_TYPE_BOOL,     VALUE_STORE_PREF,     VALUE_STYLE_NONE,       (void *) &m_DEMO_MODE,  NULL,           },
+    { ID_ONBOARD_LED,      VALUE_TYPE_BOOL,     VALUE_STORE_TOPIC,    VALUE_STYLE_NONE,       (void *) &_ONBOARD_LED,    (void *) onLed, },
+
+    { ID_OTHER_LED,        VALUE_TYPE_BOOL,     VALUE_STORE_TOPIC,    VALUE_STYLE_NONE,       (void *) &_OTHER_LED,      (void *) onLed, },
+    { ID_DEMO_MODE,        VALUE_TYPE_BOOL,     VALUE_STORE_PREF,     VALUE_STYLE_NONE,       (void *) &_DEMO_MODE,       NULL,          },
 };
 
 #define NUM_BILGE_VALUES (sizeof(m_bilge_values)/sizeof(valDescriptor))
 
 
-uint32_t bilgeAlarm::m_state = 0;
-uint32_t bilgeAlarm::m_alarm_state = 0;
+// values
 
-String bilgeAlarm::m_lcd_line1;
-String bilgeAlarm::m_lcd_line2;
+uint32_t bilgeAlarm::_state;
+uint32_t bilgeAlarm::_alarm_state;
 
-bool bilgeAlarm::m_RELAY = 0;
+bool bilgeAlarm::_FORCE_RELAY;
 
-bool bilgeAlarm::m_ONBOARD_LED = 0;
-bool bilgeAlarm::m_OTHER_LED = 0;
-bool bilgeAlarm::m_DEMO_MODE = 0;
+bool bilgeAlarm::_disabled;
+int bilgeAlarm::_backlight_secs;
+int bilgeAlarm::_err_run_time;
+int bilgeAlarm::_crit_run_time;
+int bilgeAlarm::_err_per_hour;
+int bilgeAlarm::_err_per_day;
+int bilgeAlarm::_run_emergency;
+int bilgeAlarm::_extra_run_time;
+int bilgeAlarm::_extra_run_mode;
+int bilgeAlarm::_extra_run_delay;
+int bilgeAlarm::_sense_millis;
+int bilgeAlarm::_pump_debounce;
+int bilgeAlarm::_relay_debounce;
+
+String bilgeAlarm::_lcd_line1;
+String bilgeAlarm::_lcd_line2;
+
+bool bilgeAlarm::_ONBOARD_LED;
+
+bool bilgeAlarm::_OTHER_LED;
+bool bilgeAlarm::_DEMO_MODE;
+
+// working vars
+
+uint32_t bilgeAlarm::m_pump1_debounce_time;
+uint32_t bilgeAlarm::m_pump2_debounce_time;
+uint32_t bilgeAlarm::m_relay_delay_time;
+uint32_t bilgeAlarm::m_relay_time;
+bool     bilgeAlarm::m_suppress_next_after;
+
 
 bilgeAlarm *bilge_alarm = NULL;
 
-
 LiquidCrystal_I2C lcd(0x27,LCD_LINE_LEN,2);   // 20,4);  // set the LCD address to 0x27 for a 16 chars and 2 line display
 
+
+//-------------------------------------
+// temporary time database
+//-------------------------------------
+
+#define HOURS_REP_1      (1000 * 60 * 60)
+#define HOURS_REP_24     (1000 * 60 * 60 * 24)
+
+#define MAX_TIMES  100
+    // temporary define for the circular buffer of millis() based pump-on times
+    // to be changed to a database of time_t's
+
+static uint32_t run_times[MAX_TIMES];
+static int run_head = 0;
+
+void addRun()
+{
+    run_times[run_head++] = millis();
+    if (run_head >= MAX_TIMES) run_head = 0;
+}
+
+int countRuns(uint32_t hours_rep)
+{
+    int count = 0;
+    int head = run_head;
+    uint32_t now = millis();
+    uint32_t cutoff = hours_rep >= now ? 1 : now-hours_rep;
+    for (int i=0; i<MAX_TIMES; i++)
+    {
+        uint32_t time = run_times[head];
+        if (head >= MAX_TIMES) head = 0;
+        if (time && time > cutoff) count++;
+    }
+    return count;
+}
+
+
+//--------------------------------
+// implementation
+//--------------------------------
 
 bilgeAlarm::bilgeAlarm()
 {
@@ -154,37 +263,165 @@ void bilgeAlarm::setup()
 
     myIOTDevice::setup();
 
+    LOGI("starting alarmTask");
+    xTaskCreate(alarmTask,
+        "alarmTask",
+        DEBUG_ALARM ? 4096 : 1024,  // very small stack unless debuggin
+        NULL,           // param
+        5,  	        // note that the priority is higher than one
+        NULL);
+
     proc_leave();
     LOGD("bilgeAlarm::setup(%s) completed",getVersion());
 }
 
 
+void bilgeAlarm::suppressError()
+{
+    LOGD("suppressError()");
+    setAlarmState(_alarm_state | ALARM_STATE_SUPPRESSED);
+}
+
+
+void bilgeAlarm::clearError()
+{
+    LOGD("clearError()");
+    setAlarmState(0);
+    setState(_state & ~(
+        STATE_EMERGENCY |
+        STATE_TOO_OFTEN_HOUR |
+        STATE_TOO_OFTEN_DAY |
+        STATE_TOO_LONG |
+        STATE_CRITICAL_TOO_LONG ));
+}
+
+
+#if DEBUG_STATES
+    static String stateString(uint32_t state, enumValue *ptr)
+    {
+        int mask = 1;
+        String rslt = "";
+        while (*ptr)
+        {
+            if (state & mask)
+            {
+                if (rslt != "") rslt += ",";
+                rslt += *ptr;
+            }
+            mask <<= 1;
+            ptr++;
+        }
+        return rslt;
+    }
+
+    static void debugState(const char *what, bool *bptr, uint32_t in, uint32_t rslt, enumValue *ptr)
+    {
+        String bval = "";
+        if (bptr)
+        {
+            bval = *bptr;
+            bval += ",";
+        }
+        LOGD("%s(%s0x%08x:%s)  ==> 0x%08x:%s",
+            what,
+            bval,
+            in,
+            stateString(in,ptr).c_str(),
+            rslt,
+            stateString(rslt,ptr).c_str());
+    }
+#else
+    #define debugState(a,b,c,d,e)
+#endif
+
+
+
 void bilgeAlarm::setState(uint32_t state)
 {
-    uint32_t new_state = m_state | state;
-    bilge_alarm->setBenum(ID_STATE,new_state);
+    bilge_alarm->setBenum(ID_STATE,state);
+    debugState("setState",NULL,state,_state,systemStates);
 }
-void bilgeAlarm::clearState(uint32_t state)
+
+
+void bilgeAlarm::setAlarmState(uint32_t state)
 {
-    uint32_t new_state = m_state & ~state;
-    bilge_alarm->setBenum(ID_STATE,new_state);
+    bilge_alarm->setBenum(ID_ALARM_STATE,state);
+    debugState("setAlarmState",NULL,state,_alarm_state,alarmStates);
 }
-void bilgeAlarm::setAlarmState(uint32_t alarm_state)
+
+
+//------------------------------------
+// alarmTask
+//------------------------------------
+
+#define CHIRP_TIME              30
+#define NUM_CRITICAL_CHIRPS     5
+#define TIME_BETWEEN_CHIRPS     300
+#define TIME_BETWEEN_ALARMS     9000        // to be parameterized
+
+
+static void chirp()
 {
-    uint32_t new_state = m_alarm_state | alarm_state;
-    bilge_alarm->setBenum(ID_ALARM_STATE,new_state);
-    LOGD("ALARM_STATE=0x%04x",m_alarm_state);
+    digitalWrite(PIN_ALARM,1);
+    delay(CHIRP_TIME);
+    digitalWrite(PIN_ALARM,0);
 }
-void bilgeAlarm::clearAlarmState(uint32_t alarm_state)
+
+
+void bilgeAlarm::alarmTask(void *param)
+    // !DEBUG_ALARMS == very small task stack!!
+    // Be sure to bracket LOG calls in #if DEBUG_ALARMS
 {
-    uint32_t new_state = m_alarm_state & ~alarm_state;
-    bilge_alarm->setBenum(ID_ALARM_STATE,new_state);
-    LOGD("ALARM_STATE=0x%04x",m_alarm_state);
+    delay(3000);
+
+    static bool alarm_on = false;
+    static uint32_t alarm_time = 0;
+    static uint32_t last_alarm_state = 0;
+
+    while (1)
+    {
+        vTaskDelay(1);
+        uint32_t now = millis();
+        if (last_alarm_state != _alarm_state)
+        {
+            #if DEBUG_ALARMS
+                LOGD("alarm_state_changed to 0x%02x",_alarm_state);
+            #endif
+
+            last_alarm_state = _alarm_state;
+            alarm_on =
+                (_alarm_state & ALARM_STATE_ANY) &&
+                !(_alarm_state & ALARM_STATE_SUPPRESSED);
+            alarm_time = 0;
+            if (!alarm_on)
+                digitalWrite(PIN_ALARM,0);
+            else if (_alarm_state & ALARM_STATE_EMERGENCY)
+                digitalWrite(PIN_ALARM,alarm_on);
+        }
+        else if (alarm_on &&
+                 _alarm_state < ALARM_STATE_EMERGENCY &&
+                 now > alarm_time + TIME_BETWEEN_ALARMS)
+        {
+            alarm_time = now;
+            if (_alarm_state & ALARM_STATE_CRITICAL)
+            {
+                for (int i=0; i<NUM_CRITICAL_CHIRPS; i++)
+                {
+                    chirp();
+                    delay(TIME_BETWEEN_CHIRPS);
+                }
+            }
+            else
+            {
+                chirp();
+            }
+        }
+    }   // while (1)
 }
 
 
 //---------------------------------------------------
-// onXXX handlers - pins and hardware
+// buttons and other hardware
 //---------------------------------------------------
 
 void bilgeAlarm::onLed(const myIOTValue *value, bool val)
@@ -201,16 +438,9 @@ void bilgeAlarm::onLed(const myIOTValue *value, bool val)
 }
 
 
-void bilgeAlarm::onRelay(const myIOTValue *value, bool val)
-{
-    LOGD("onRelay(%d)",val);
-    digitalWrite(PIN_RELAY,val);
-}
-
-
 void bilgeAlarm::onLcdLine(const myIOTValue *value, const char *val)
 {
-    int line = value->getId() == ID_LCD_LINE1 ? 1 : 0;
+    int line = value->getId() == ID_LCD_LINE1 ? 0 : 1;
     LOGD("onLCDLine(%d,%s)",line,val);
 
     char buf[LCD_LINE_LEN+1];
@@ -226,35 +456,223 @@ void bilgeAlarm::onLcdLine(const myIOTValue *value, const char *val)
 }
 
 
+void bilgeAlarm::onDisabled(const myIOTValue *value, bool val)
+{
+    LOGD("onDisabled(%d)",val);
+    if (val)
+    {
+        setState(0);
+        setAlarmState(0);
+        m_relay_time = 0;
+        m_relay_delay_time = 0;
+        digitalWrite(PIN_RELAY,0);
+        bilge_alarm->setBool(ID_FORCE_RELAY,0);
+    }
+}
 
-//---------------------------------------------
-// loop handlers (state machine in pieces)
-//---------------------------------------------
+
 
 void bilgeAlarm::handleButtons()
 {
-
+    bool button1 = digitalRead(PIN_BUTTON1);
+    bool button2 = digitalRead(PIN_BUTTON2);
+    bool button3 = digitalRead(PIN_BUTTON3);
+    bool button4 = digitalRead(PIN_BUTTON4);
+    if (_alarm_state && !(_alarm_state & ALARM_STATE_SUPPRESSED))
+    {
+        if (button1 || button2 || button3 || button4)
+            _alarm_state |= ALARM_STATE_SUPPRESSED;
+    }
 }
-void bilgeAlarm::handleSensors()
+
+
+
+//-------------------------------------------------------
+// STATE MACHINE (handleSensors() and onForceRelay()
+//-------------------------------------------------------
+
+
+void bilgeAlarm::onForceRelay(const myIOTValue *value, bool val)
 {
+    LOGD("onForceRelay(%d)",val);
+    uint32_t new_state = _state;
+
+    m_relay_time = 0;
+    m_relay_delay_time = 0;
+
+    if (val)
+    {
+        new_state &= ~(STATE_RELAY_EMERGENCY | STATE_RELAY_EXTRA);
+        new_state |= STATE_RELAY_FORCED | STATE_RELAY_ON;
+    }
+    else
+    {
+        m_suppress_next_after = 1;
+        new_state &= ~(STATE_RELAY_FORCED | STATE_RELAY_EMERGENCY | STATE_RELAY_EXTRA | STATE_RELAY_ON);
+    }
+
+    digitalWrite(PIN_RELAY,val);
+    if (new_state != _state)
+        setState(new_state);
+}
+
+
+
+void bilgeAlarm::handleSensors()
+    // There is an issue that we don't want to publish to WS or MQTT in the middle of time,
+    // but I am going to ignore that for now and may eventually implement an asynchronous
+    // publishing task in myIOTValues.cpp
+{
+    uint32_t now = millis();
+    uint32_t new_state = _state;
+
     bool pump1_on = digitalRead(PIN_PUMP1_ON);
     bool pump2_on = digitalRead(PIN_PUMP2_ON);
-    bool was_on1 = m_state & STATE_PUMP_ON;
-    bool was_on2 = m_state & STATE_EMERGENCY_PUMP_ON;
+    bool was_on1 = new_state & STATE_PUMP1_ON;
+    bool was_on2 = new_state & STATE_PUMP2_ON;
+    bool forced_on = new_state & STATE_RELAY_FORCED;
+    bool emergency_on = new_state & STATE_RELAY_EMERGENCY;
 
-    if (pump1_on != was_on1)
+    //--------------------------------------
+    // PUMP2
+    //--------------------------------------
+    // pump2 is higher priority - it may turn on the emergency_relay
+    // so should be detected first
+
+    if (was_on2 != pump2_on && now > m_pump2_debounce_time)
     {
-        LOGD("pump1_on=%d",pump1_on);
-        changeState(pump1_on,STATE_PUMP_ON);
+        LOGD("m_pump2_on=%d",pump2_on);
+        m_pump2_debounce_time = now  + _pump_debounce;
+
+        if (pump2_on)
+        {
+            new_state |= STATE_PUMP2_ON;
+            if (!_disabled)
+            {
+                new_state |= STATE_EMERGENCY;
+                setAlarmState(_alarm_state | ALARM_STATE_CRITICAL | ALARM_STATE_EMERGENCY);
+            }
+        }
+        else
+        {
+            if (!_disabled)
+                setAlarmState(_alarm_state & ~ALARM_STATE_EMERGENCY);
+            new_state &= ~STATE_PUMP2_ON;
+        }
+
+        if (!_disabled && !forced_on && pump2_on &&_run_emergency)
+        {
+            new_state &= ~STATE_RELAY_EXTRA;
+            new_state |= STATE_RELAY_EMERGENCY;
+            emergency_on = 1;
+        }
     }
-    if (pump2_on != was_on2)
+
+    // extend the emergency relay as long as the pump2 switch is on
+
+    if (pump2_on & emergency_on)
     {
-        LOGD("pump2_on=%d",pump2_on);
-        // of course this is just temporary state logic
-        changeState(pump2_on,STATE_EMERGENCY_PUMP_ON);
-        // which turns the alarm on directly ...
-        changeAlarmState(pump2_on,ALARM_STATE_EMERGENCY);
+        m_relay_time = now + _run_emergency * 1000;
     }
+
+
+    //-----------------------------
+    // PUMP1
+    //-----------------------------
+
+    if (was_on1 != pump1_on && now > m_pump1_debounce_time)
+    {
+        LOGD("m_pump1_on=%d",pump1_on);
+        m_pump1_debounce_time = now + _pump_debounce;
+
+        if (pump1_on)
+            new_state |= STATE_PUMP1_ON;
+        else
+            new_state &= ~STATE_PUMP1_ON;
+
+        if (!_disabled && !forced_on && !emergency_on && _extra_run_time)
+        {
+            if (pump1_on && !_extra_run_mode)
+            {
+                new_state |= STATE_RELAY_EXTRA;
+            }
+            else if (!pump1_on && _extra_run_mode && !m_suppress_next_after)
+            {
+                new_state |= STATE_RELAY_EXTRA;
+                m_relay_delay_time = now + _extra_run_delay;
+                    // relay will come on after the switch has been off for EXTRA_RUN_DELAY millis
+            }
+        }
+
+        m_suppress_next_after = 0;
+    }
+
+
+    //------------------------------------
+    // THE RELAY
+    //------------------------------------
+
+    if (!_disabled && !forced_on)
+    {
+        static uint32_t last_relay_state = 0;
+        uint32_t relay_state = new_state & (
+            STATE_RELAY_EMERGENCY |
+            STATE_RELAY_EXTRA);
+        bool extra_on = new_state & STATE_RELAY_EXTRA;
+        bool emergency_on = new_state & STATE_RELAY_EMERGENCY;
+
+        if (last_relay_state != relay_state &&
+            now > m_relay_delay_time)
+        {
+            last_relay_state = relay_state;
+
+            m_relay_time = 0;
+
+            bool is_on = new_state & STATE_RELAY_ON;
+            bool should_be_on = relay_state;
+            if (is_on != should_be_on)
+            {
+                if (should_be_on)
+                    new_state |= STATE_RELAY_ON;
+                else
+                {
+                    new_state &= ~STATE_RELAY_ON;
+                }
+                LOGD("relay=%d",should_be_on);
+                digitalWrite(PIN_RELAY,should_be_on);
+            }
+
+            // turning on a changed relay state
+
+            if (should_be_on)
+            {
+                if (emergency_on && _run_emergency)
+                    m_relay_time = now + _run_emergency * 1000;
+                if (extra_on &&_extra_run_time)
+                    m_relay_time = now + _extra_run_time * 1000;
+            }
+            else // turning off, clear relay_time, set specific relay debounce time for pump1 switch
+            {
+                m_pump1_debounce_time = now + _relay_debounce;
+                m_suppress_next_after = 1;
+            }
+        }
+
+        // if the state did not change, check for timer expiration
+
+        else if (m_relay_time && now > m_relay_time)
+        {
+            LOGD("relay off");
+            m_relay_time = 0;
+            m_suppress_next_after = 1;
+            new_state &= ~(STATE_RELAY_EMERGENCY | STATE_RELAY_EXTRA | STATE_RELAY_ON);
+            digitalWrite(PIN_RELAY,0);
+        }
+    }
+
+
+    if (new_state != _state)
+        setState(new_state);
 }
 
 
@@ -270,23 +688,14 @@ void bilgeAlarm::loop()
     uint32_t now = millis();
     static uint32_t check_buttons = 0;
     static uint32_t check_sensors = 0;
-    if (now > check_buttons + 30)
+    if (now > check_buttons + BUTTON_CHECK_TIME)
     {
         check_buttons = now;
         handleButtons();
     }
-    if (now > check_sensors + 300)
+    if (now > check_sensors + _sense_millis)
     {
         check_sensors = now;
         handleSensors();
-    }
-
-    static uint32_t last_alarm_state = 0;
-    if (last_alarm_state != m_alarm_state)
-    {
-        last_alarm_state = m_alarm_state;
-        bool on = m_alarm_state & ALARM_STATE_EMERGENCY;
-        LOGD("write ALARM %d",on);
-        digitalWrite(PIN_ALARM,on);
     }
 }
