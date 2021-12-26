@@ -298,9 +298,8 @@ function handleWS(ws_event)
 
 
 //---------------------------------------
-// table fillers
+// table fillers (UI Builder)
 //---------------------------------------
-
 
 function updateSPIFFSList(obj)
 {
@@ -633,8 +632,6 @@ function startMyIOT()
 
     // initChart();
 }
-
-
 
 
 window.onload = startMyIOT;

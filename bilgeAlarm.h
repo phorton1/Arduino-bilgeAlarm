@@ -41,9 +41,9 @@
 #define ID_STATE            "STATE"
 #define ID_ALARM_STATE      "ALARM_STATE"
 
-#define ID_FORCE_RELAY      "FORCE_RELAY"           // the "user command" (switch) to force the relay on or possibly off
-#define ID_SUPPRESS         "SUPPRESS"              // the "user command" (button) to suppress the alarm
-#define ID_CLEAR_ERROR      "CLEAR"                 // the "user command" (button) to clear the current alarm state
+#define ID_FORCE_RELAY      "FORCE_RELAY"           // the user command (switch) to force the relay on or off
+#define ID_SUPPRESS         "SUPPRESS"              // the user command (button) to suppress the alarm sound
+#define ID_CLEAR_ERROR      "CLEAR"                 // the user command (button) to clear the current error
 
 #define ID_DISABLED         "DISABLED"              // enabled,disabled = LEDs still light, but no errors, extra runs, or other functionality will take place
 #define ID_BACKLIGHT_SECS   "BACKLIGHT_SECS"        // off,secs = backlight will turn off if no buttons pressed after this many seconds
@@ -51,21 +51,22 @@
 #define ID_CRIT_RUN_TIME    "CRIT_RUN_TIME"         // off,secs - pump running this many seconds or more is a "critical error alarm"
 #define ID_ERR_PER_HOUR     "ERR_PER_HOUR"          // off,num - pump running more than this many times per hour is an "error alarm"
 #define ID_ERR_PER_DAY      "ERR_PER_DAY"           // off,secs - pump running more than this many times per day is an "error alarm"
+
 #define ID_EXTRA_RUN_TIME   "EXTRA_RUN_TIME"        // off,secs - how long to turn on relay if pump goes on,
 #define ID_EXTRA_RUN_MODE   "EXTRA_RUN_MODE"        // at_start, after_end - whether to turn on relay when pump turns on, or when it turns off
 #define ID_EXTRA_RUN_DELAY  "EXTRA_RUN_DELAY"       // millis, if after_end, how long after pump goes off before we turn on relay (long debounce time)
-#define ID_SENSE_MILLIS     "SENSE_MILLIS"          // millis  5+ - how often to check the pump input pins, 5 minimum 30 ms default
+
+#define ID_SENSE_MILLIS     "SENSE_MILLIS"          // millis  5+ - how often to check the pump input pins, 5 minimum 30 default
 #define ID_PUMP_DEBOUNCE    "PUMP_DEBOUNCE"         // millis - how long after the pump switch changes before we read it again
 #define ID_RELAY_DEBOUNCE   "RELAY_DEBOUNCE"        // millis - how long after the relay goes off before we read the pump switch again
     // We read the pump sensors every SENSOR_MILLIS milliseconds.
-    // The PUMP_DEBOUNCE value is how long after it changes before we read it again, though we act upon it immediately
-    // The EXTRA_RUN_DELAY is how long AFTER the pump goes off before we trigger an EXTRA_RUN
+    // The PUMP_DEBOUNCE value is how long after it changes before we read it again (though we act upon it immediately)
     // The RELAY_DEBOUNCE time is how long after we turn the relay off before we check the pump switch again.
     //    The relay will energize the pump switch and due to inductance in the motor, the switch may appear on
     //    when it is not really on for some period of time as the motor spins down.
 
 #define ID_RUN_EMERGENCY    "RUN_EMERGENCY"         // off,secs - how long to turn on the relay as long as the emergency switch turns on
-    // This will run the main pump if the emergency pump turns, and continue running it for N more seconds than the emergency pump
+    // This will run the main pump if the emergency pump turns on, and continue running it for N more seconds than the emergency pump
 
 #define ID_ONBOARD_LED      "ONBOARD_LED"
 #define ID_OTHER_LED        "OTHER_LED"
@@ -134,29 +135,27 @@ private:
     static uint32_t _state;
     static uint32_t _alarm_state;
 
-    static bool _FORCE_RELAY;
-
     static bool _disabled;
-    static int _backlight_secs;
-    static int _err_run_time;
-    static int _crit_run_time;
-    static int _err_per_hour;
-    static int _err_per_day;
-    static int _run_emergency;
-    static int _extra_run_time;
-    static int _extra_run_mode;
-    static int _extra_run_delay;
-    static int _sense_millis;
-    static int _pump_debounce;
-    static int _relay_debounce;
+    static int  _backlight_secs;
+    static int  _err_run_time;
+    static int  _crit_run_time;
+    static int  _err_per_hour;
+    static int  _err_per_day;
+    static int  _run_emergency;
+    static int  _extra_run_time;
+    static int  _extra_run_mode;
+    static int  _extra_run_delay;
+    static int  _sense_millis;
+    static int  _pump_debounce;
+    static int  _relay_debounce;
+
+    static bool _FORCE_RELAY;
+    static bool _ONBOARD_LED;
+    static bool _OTHER_LED;
+    static bool _DEMO_MODE;
 
     static String _lcd_line1;
     static String _lcd_line2;
-
-    static bool _ONBOARD_LED;
-
-    static bool _OTHER_LED;
-    static bool _DEMO_MODE;
 
     // working vars
 
