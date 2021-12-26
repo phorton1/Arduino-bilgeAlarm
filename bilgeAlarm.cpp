@@ -24,8 +24,8 @@
 
 #define DEFAULT_ERR_RUN_TIME        10         // off,secs
 #define DEFAULT_CRIT_RUN_TIME       30         // off,secs
-#define DEFAULT_ERR_PER_HOUR        2          // off,num
-#define DEFAULT_ERR_PER_DAY         12         // off,secs
+#define DEFAULT_ERR_PER_HOUR        4          // off,num
+#define DEFAULT_ERR_PER_DAY         20         // off,secs
 
 #define DEFAULT_EXTRA_RUN_TIME      5          // off,secs
 #define DEFAULT_EXTRA_RUN_MODE      1          // at_start, after_end
@@ -117,13 +117,13 @@ const valDescriptor bilgeAlarm::m_bilge_values[] =
     { ID_ALARM_STATE,      VALUE_TYPE_BENUM,    VALUE_STORE_TOPIC,    VALUE_STYLE_LONG,       (void *) &_alarm_state,   NULL,   { .enum_range = { 4, alarmStates }} },
 
     { ID_DISABLED,         VALUE_TYPE_BOOL,     VALUE_STORE_PREF,     VALUE_STYLE_NONE,       (void *) &_disabled,      (void *) onDisabled,   { .int_range = { DEFAULT_DISABLED, 0, 1}} },
-    { ID_BACKLIGHT_SECS,   VALUE_TYPE_INT,      VALUE_STORE_PREF,     VALUE_STYLE_NONE,       (void *) &_backlight_secs, NULL,  { .int_range = { DEFAULT_BACKLIGHT_SECS,    0,  255}}   },
-    { ID_ERR_RUN_TIME,     VALUE_TYPE_INT,      VALUE_STORE_PREF,     VALUE_STYLE_NONE,       (void *) &_err_run_time,   NULL,  { .int_range = { DEFAULT_ERR_RUN_TIME,      0,  255}}   },
-    { ID_CRIT_RUN_TIME,    VALUE_TYPE_INT,      VALUE_STORE_PREF,     VALUE_STYLE_NONE,       (void *) &_crit_run_time,  NULL,  { .int_range = { DEFAULT_CRIT_RUN_TIME,     0,  255}}   },
+    { ID_BACKLIGHT_SECS,   VALUE_TYPE_INT,      VALUE_STORE_PREF,     VALUE_STYLE_NONE,       (void *) &_backlight_secs, NULL,  { .int_range = { DEFAULT_BACKLIGHT_SECS,    0,  3600}}  },
+    { ID_ERR_RUN_TIME,     VALUE_TYPE_INT,      VALUE_STORE_PREF,     VALUE_STYLE_NONE,       (void *) &_err_run_time,   NULL,  { .int_range = { DEFAULT_ERR_RUN_TIME,      0,  3600}}  },
+    { ID_CRIT_RUN_TIME,    VALUE_TYPE_INT,      VALUE_STORE_PREF,     VALUE_STYLE_NONE,       (void *) &_crit_run_time,  NULL,  { .int_range = { DEFAULT_CRIT_RUN_TIME,     0,  3600}}  },
     { ID_ERR_PER_HOUR,     VALUE_TYPE_INT,      VALUE_STORE_PREF,     VALUE_STYLE_NONE,       (void *) &_err_per_hour,   NULL,  { .int_range = { DEFAULT_ERR_PER_HOUR,      0,  255}}   },
     { ID_ERR_PER_DAY,      VALUE_TYPE_INT,      VALUE_STORE_PREF,     VALUE_STYLE_NONE,       (void *) &_err_per_day,    NULL,  { .int_range = { DEFAULT_ERR_PER_DAY,       0,  255}}   },
-    { ID_RUN_EMERGENCY,    VALUE_TYPE_INT,      VALUE_STORE_PREF,     VALUE_STYLE_NONE,       (void *) &_run_emergency,  NULL,  { .int_range = { DEFAULT_RUN_EMERGENCY,     0,  255}}   },
-    { ID_EXTRA_RUN_TIME,   VALUE_TYPE_INT,      VALUE_STORE_PREF,     VALUE_STYLE_NONE,       (void *) &_extra_run_time, NULL,  { .int_range = { DEFAULT_EXTRA_RUN_TIME,    0,  255}}   },
+    { ID_RUN_EMERGENCY,    VALUE_TYPE_INT,      VALUE_STORE_PREF,     VALUE_STYLE_NONE,       (void *) &_run_emergency,  NULL,  { .int_range = { DEFAULT_RUN_EMERGENCY,     0,  3600}}  },
+    { ID_EXTRA_RUN_TIME,   VALUE_TYPE_INT,      VALUE_STORE_PREF,     VALUE_STYLE_NONE,       (void *) &_extra_run_time, NULL,  { .int_range = { DEFAULT_EXTRA_RUN_TIME,    0,  3600}}  },
     { ID_EXTRA_RUN_MODE,   VALUE_TYPE_INT,      VALUE_STORE_PREF,     VALUE_STYLE_NONE,       (void *) &_extra_run_mode, NULL,  { .int_range = { DEFAULT_EXTRA_RUN_MODE,    0,  1}}     },
     { ID_EXTRA_RUN_DELAY,  VALUE_TYPE_INT,      VALUE_STORE_PREF,     VALUE_STYLE_NONE,       (void *) &_extra_run_delay,NULL,  { .int_range = { DEFAULT_EXTRA_RUN_DELAY,   5,  30000}} },
     { ID_SENSE_MILLIS,     VALUE_TYPE_INT,      VALUE_STORE_PREF,     VALUE_STYLE_NONE,       (void *) &_sense_millis,   NULL,  { .int_range = { DEFAULT_SENSE_MILLIS,      5,  30000}} },
@@ -177,6 +177,14 @@ uint32_t bilgeAlarm::m_pump2_debounce_time;
 uint32_t bilgeAlarm::m_relay_delay_time;
 uint32_t bilgeAlarm::m_relay_time;
 bool     bilgeAlarm::m_suppress_next_after;
+
+uint32_t bilgeAlarm::m_start_duration;
+    // The "duration" that pump1 is "on"
+    // INCLUDES the "extra_time" if EXTRA_MODE(0) "at_start", so
+    // the ERR_RUN_TIME and CRIT_RUN_TIME values must be larger than EXTRA_RUN_TIME
+    // if using EXTRA_RUN_MODE(0) "at_start"
+
+
 
 // globals
 
@@ -531,6 +539,7 @@ void bilgeAlarm::handleSensors()
 {
     uint32_t now = millis();
     uint32_t new_state = _state;
+    uint32_t new_alarm_state = _alarm_state;
 
     bool pump1_on = digitalRead(PIN_PUMP1_ON);
     bool pump2_on = digitalRead(PIN_PUMP2_ON);
@@ -556,14 +565,14 @@ void bilgeAlarm::handleSensors()
             if (!_disabled)
             {
                 new_state |= STATE_EMERGENCY;
-                setAlarmState(_alarm_state | ALARM_STATE_CRITICAL | ALARM_STATE_EMERGENCY);
+                new_alarm_state |= ALARM_STATE_CRITICAL | ALARM_STATE_EMERGENCY;
             }
         }
         else
         {
-            if (!_disabled)
-                setAlarmState(_alarm_state & ~ALARM_STATE_EMERGENCY);
             new_state &= ~STATE_PUMP2_ON;
+            if (!_disabled)
+                new_alarm_state &= ~ALARM_STATE_EMERGENCY;
         }
 
         if (!_disabled && !forced_on && pump2_on &&_run_emergency)
@@ -592,9 +601,15 @@ void bilgeAlarm::handleSensors()
         m_pump1_debounce_time = now + _pump_debounce;
 
         if (pump1_on)
+        {
             new_state |= STATE_PUMP1_ON;
+            m_start_duration = now;
+        }
         else
+        {
             new_state &= ~STATE_PUMP1_ON;
+            m_start_duration = 0;
+        }
 
         if (!_disabled && !forced_on && !emergency_on && _extra_run_time)
         {
@@ -611,6 +626,24 @@ void bilgeAlarm::handleSensors()
         }
 
         m_suppress_next_after = 0;
+    }
+
+    // duration based alarms
+
+    if (pump1_on && m_start_duration)
+    {
+        uint32_t duration = (now - m_start_duration + 999) / 1000;
+
+        if (_err_run_time && duration > _err_run_time)
+        {
+            new_state |= STATE_TOO_LONG;
+            new_alarm_state |= ALARM_STATE_ERROR;
+        }
+        if (_crit_run_time && duration > _crit_run_time)
+        {
+            new_state |= STATE_CRITICAL_TOO_LONG;
+            new_alarm_state |= ALARM_STATE_CRITICAL;
+        }
     }
 
 
@@ -678,6 +711,8 @@ void bilgeAlarm::handleSensors()
 
     if (new_state != _state)
         setState(new_state);
+    if (new_alarm_state != _alarm_state)
+        setAlarmState(new_alarm_state);
 
 }   // handleSensors()
 
