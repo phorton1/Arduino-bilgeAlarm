@@ -205,16 +205,15 @@ var old_socket;
 
 function openWebSocket()
 {
-
-    console.log("openWebSocket(" + ws_connect_count  + ")");
-    $('#ws_status1').html("WS(" + ws_connect_count + ") OPENING");
-
     // allow for extracting the port+1 from ports other than default 80
 
     var port = location.port;
     if (port == '')
         port = '80';
     var url = 'ws://' + location.hostname + ':' + (parseInt(port) + 1);
+
+    console.log("openWebSocket(" + ws_connect_count  + ") to " + url);
+    $('#ws_status1').html("WS(" + ws_connect_count + ") O " + url);
 
     old_socket = web_socket;
     ws_open_count++;
