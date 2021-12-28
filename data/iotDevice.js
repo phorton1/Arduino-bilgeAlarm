@@ -1,5 +1,12 @@
 // prh - might be useful to have a watchdog that reloads the page every so often
 
+const debug_alive = 1;
+const keep_alive_interval = 60000;      // how often to check keep alive
+const keep_alive_timeout = 20000;       // how long to wait for ping response before considering it dead
+const ws_repoen_delay = 3000;           // how long to wait for re-open (allowing for close) after dead
+
+    // 10000 is too quick for connect over VPN ?!?
+
 // constants that agree with C++ code
 
 const VALUE_TYPE_COMMAND = 'X';         // monadic (commands)
@@ -40,8 +47,8 @@ var fake_uuid;
 
 var web_socket;
 var ws_connect_count = 0;
-var ws_alive = 0;
-var debug_alive = 0;
+var ws_open_count = 0;
+
 
 var file_request_num = 0;
 var in_upload = false;
@@ -160,37 +167,47 @@ function sendCommand(command,params)
 
 function checkAlive()
 {
-    if (in_upload)
+    if (in_upload || !web_socket || web_socket.opening || web_socket.closing)
         return;
-
     if (debug_alive)
-        console.log("checkAlive");
-    if (!ws_alive)
+        console.log("checkAlive web_socket(" + web_socket.my_id + ")");
+
+    if (!web_socket.alive)
     {
-        console.log("checkAlive re-opening web_socket");
+        ws_closing = 1;
+        console.log("checkAlive closing web_socket(" + web_socket.my_id + ")");
+        $('#ws_status2').html("WS(" + web_socket.my_id + ") CLOSING");
+        web_socket.close();
+        console.log("checkAlive calling openWebSocket()");
         openWebSocket();
     }
     else if (debug_alive)
     {
-        console.log("checkAlive ok");
+        console.log("checkAlive(" + web_socket.my_id + ") ok");
+        setTimeout(keepAlive,keep_alive_interval);
     }
 }
 
 function keepAlive()
 {
+    if (in_upload || !web_socket || !web_socket.alive || web_socket.opening || web_socket.closing)
+        return;
     if (debug_alive)
-        console.log("keepAlive");
-    ws_alive = 0;
+        console.log("keepAlive web_socket(" + web_socket.my_id + ")");
+    web_socket.alive = 0;
     sendCommand("ping");
-    setTimeout(checkAlive,3000);
+    setTimeout(checkAlive,keep_alive_timeout);
 }
 
 
+
+var old_socket;
+
 function openWebSocket()
 {
-    console.log("openWebSocket()");
 
-    $('#ws_status').html("Web Socket " + ws_connect_count + " CLOSED");
+    console.log("openWebSocket(" + ws_connect_count  + ")");
+    $('#ws_status1').html("WS(" + ws_connect_count + ") OPENING");
 
     // allow for extracting the port+1 from ports other than default 80
 
@@ -198,22 +215,46 @@ function openWebSocket()
     if (port == '')
         port = '80';
     var url = 'ws://' + location.hostname + ':' + (parseInt(port) + 1);
+
+    old_socket = web_socket;
+    ws_open_count++;
+
     web_socket = new WebSocket(url);
+    web_socket.my_id = ws_connect_count++;
+    web_socket.opening = 1;
+    web_socket.closing = 0;
+    web_socket.alive = 0;
 
     web_socket.onopen = function(event)
     {
-        ws_connect_count++;
-        $('#ws_status').html("Web Socket OPEN " + ws_connect_count);
-        console.log("WebSocket OPEN(" + ws_connect_count + "): " + JSON.stringify(event, null, 4));
+        console.log("web_socket(" + this.my_id + ") OPENED");
+        $('#ws_status1').html("WS(" + this.my_id + ") OPENED");
+
+        this.opening = 0;
         sendCommand("spiffs_list");
         sendCommand("value_list");
+        this.alive = 1;
+        setTimeout(keepAlive,keep_alive_interval);
+
         // sendCommand("get_chart_data");
     };
 
     web_socket.onclose = function(closeEvent)
     {
-        console.log("Web Socket Connection lost");
-        // $('#ws_status').html("Web Socket " + ws_connect_count + " CLOSED");
+        ws_open_count--;
+
+        console.log("web_socket(" + this.my_id +") CLOSED");
+        $('#ws_status2').html("WS(" + this.my_id + ") CLOSED");
+
+        this.alive = 0;
+        this.opening = 0;
+        this.closing = 0;
+
+        if (!ws_open_count)
+        {
+            console.log("websocket.onclose setting delayed call to openWebSocket")
+            setTimeout(openWebSocket,ws_repoen_delay);
+        }
     };
 
     web_socket.onmessage = handleWS;
@@ -224,11 +265,15 @@ function openWebSocket()
 function handleWS(ws_event)
 {
     var ws_msg = ws_event.data;
-    if (!ws_msg.includes("log_msg") &&
-        !(ws_msg.includes("set") && ws_msg.includes("DEVICE_AMPS")) &&
-        !(ws_msg.includes("set") && ws_msg.includes("DEVICE_VOLTS")) &&
-        (debug_alive || !ws_msg.includes("pong")))
-        console.log("WebSocket MESSAGE: " + ws_msg);
+
+//    if (!ws_msg.includes("log_msg") &&
+//        !ws_msg.includes("\"tota;\":") &&           // spiffs_list
+//        !ws_msg.includes("\"values\":") &&          // value_list
+//        !ws_msg.includes("\"device_name\":") &&     // wifi_info
+//        !(ws_msg.includes("set") && ws_msg.includes("DEVICE_AMPS")) &&
+//        !(ws_msg.includes("set") && ws_msg.includes("DEVICE_VOLTS")) &&
+//        (debug_alive || !ws_msg.includes("pong")))
+//        console.log("WebSocket MESSAGE: " + ws_msg);
 
     // everything else goes through json and we
     // just check for certain memberrs to update
@@ -240,7 +285,10 @@ function handleWS(ws_event)
         if (obj.error)
             window.alert("ERROR: " + obj.error);
         if (obj.pong)
-            ws_alive = 1;
+        {
+            web_socket.alive = 1;
+            if (debug_alive) console.log("WS:pong");
+        }
 
         if (obj.set)
         {
@@ -274,8 +322,8 @@ function handleWS(ws_event)
         if (obj.files)
             updateSPIFFSList(obj);
 
-        if (obj.chart)
-            updateChart(obj.chart);
+        // if (obj.chart)
+        //     updateChart(obj.chart);
         if (obj.log_msg)
             console.log(obj.log_msg);
 
@@ -628,7 +676,6 @@ function startMyIOT()
         return r.toString(16);  });
 
     openWebSocket();
-    setInterval(keepAlive,10000);
 
     // initChart();
 }

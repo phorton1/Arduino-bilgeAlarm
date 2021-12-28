@@ -465,6 +465,10 @@ void bilgeAlarm::onLcdLine(const myIOTValue *value, const char *val)
         buf[i] = ' ';
     buf[LCD_LINE_LEN] = 0;
 
+    // PRH - some kind of compiler / stack weirdness resulting in garbage
+    // on the display if compiled without followig LOGD line
+
+    LOGD("buf='%s'",buf);
     lcd.setCursor(0,line);
     lcd.print(buf);
 }
@@ -630,19 +634,34 @@ void bilgeAlarm::handleSensors()
 
     // duration based alarms
 
-    if (pump1_on && m_start_duration)
+    if (pump1_on)
     {
-        uint32_t duration = (now - m_start_duration + 999) / 1000;
+        if (m_start_duration)
+        {
+            // as long as the relay is on (we are assuming the relay
+            // is connected to the pump switch which we are sampling),
+            // we advance the duration starting time to prevent time
+            // related errors due to the relay itself.
 
-        if (_err_run_time && duration > _err_run_time)
-        {
-            new_state |= STATE_TOO_LONG;
-            new_alarm_state |= ALARM_STATE_ERROR;
-        }
-        if (_crit_run_time && duration > _crit_run_time)
-        {
-            new_state |= STATE_CRITICAL_TOO_LONG;
-            new_alarm_state |= ALARM_STATE_CRITICAL;
+            if (new_state & STATE_RELAY_ON)
+                m_start_duration = now;
+
+            // calculate duration that the pump has been on
+
+            uint32_t duration = (now - m_start_duration + 999) / 1000;
+
+            // raise duration based alarms
+
+            if (_err_run_time && duration > _err_run_time)
+            {
+                new_state |= STATE_TOO_LONG;
+                new_alarm_state |= ALARM_STATE_ERROR;
+            }
+            if (_crit_run_time && duration > _crit_run_time)
+            {
+                new_state |= STATE_CRITICAL_TOO_LONG;
+                new_alarm_state |= ALARM_STATE_CRITICAL;
+            }
         }
     }
 

@@ -55,9 +55,7 @@
 #define ID_EXTRA_RUN_TIME   "EXTRA_RUN_TIME"        // off,secs - how long to turn on relay if pump goes on,
 #define ID_EXTRA_RUN_MODE   "EXTRA_RUN_MODE"        // at_start, after_end - whether to turn on relay when pump turns on, or when it turns off
 #define ID_EXTRA_RUN_DELAY  "EXTRA_RUN_DELAY"       // millis, if after_end, how long after pump goes off before we turn on relay (long debounce time)
-    // since the "duration" includes the EXTRA_RUN_TIME in RUN_MODE(0) "at_start"
-    // the ERR_RUN_TIME and CRIT_RUN_TIME values must be larger than EXTRA_RUN_TIME
-    // if using EXTRA_RUN_MODE(0) "at_start"
+    // The "duration" does not include any time while the relay is on.
 
 #define ID_SENSE_MILLIS     "SENSE_MILLIS"          // millis  5+ - how often to check the pump input pins, 5 minimum 30 default
 #define ID_PUMP_DEBOUNCE    "PUMP_DEBOUNCE"         // millis - how long after the pump switch changes before we read it again
