@@ -184,6 +184,8 @@ private:
     void handleSensors();
     void handleButtons();
 
+    static void lcdPrint(int line, const char *msg);
+
 };
 
 

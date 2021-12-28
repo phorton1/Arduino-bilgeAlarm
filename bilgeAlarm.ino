@@ -25,7 +25,7 @@ void setup()
     bilge_alarm = new bilgeAlarm();
     bilge_alarm->init();
 
-    LOGU("bilgeAlarm.ino setup() started");
+    LOGU("bilgeAlarm.ino setup() started on core(%d)",xPortGetCoreID());
 
     #ifdef WITH_SD
     #ifdef INIT_SD_EARLY

@@ -6,38 +6,42 @@ There are two approaches (thus far) to providing Internet Visibility of myIOT de
 
 Both involve setting up piVPN on an rPi to encrypt LAN traffic before putting it on the net.
 
-Please see /zip/_rPi/_setup/prh-README-rPi MyIOTSetup.docx for details on how to install piVPN, as well
-as /zip/WIFI_SETUP.docx for how the LAN is configured so that piVPN has a fixed IP address (for method 1),
-and how the bilgeAlarm has a fixed address for ease of use locally and via VPN (though the rPi could implement
-SSDP to "find" myIOTDevices AND you can "see" the bilgeAlarm and click on it in the Win10 Explorer Network tab,
-I am not letting SSDP out over the internet and it doesn't seem to find it on the VPN)
+## Method 1 - public openVPN port 1194
 
-## Method 1 = Exposing piVPN Port 1194 to the internet
+This method is currently implemented and tested.
 
-**Requires that the rPi has a fixed IP address** which we might want anyways for things like NODE-RED
-or it's MQTT (Mosquito Server).
+THX38, at current public IP address 190.140.69.189 is configured on THX38 to have a Dynamic DNS
+entry from my noIP.com account to **myiot.dynns.com**
 
-Basically this amounts to giving the rPi a fixed IP address on THX37 and Forwarding piVPBN port 1194
-(in the THX38 configuration) to that fixed IP:1194.
+Please see **/zip/_rPi/_setup/prh-README-rPi** MyIOTSetup.docx for details on how to install piVPN, as well
+as **/zip/WIFI_SETUP.docx** for how the LAN is configured so that piVPN has a fixed IP address 10.237.37.110
+and forwards it's port 1194 thru THX37 and THX38 to the internet.
 
-One *can* forward the ports 80 and 81 from the bilgeAlarm at a fixed IP address as well, to say
-7800 and 7801 for testing by placing unprotected HTTP on the internet, but that's a bad idea, eh?
+The bilgeAlarm has a fixed address of 10.237.37.120 for ease of use locally and via the VPN.
 
-The major variation (implemented) in this is to use a paid account at noIP.com with THX38 routere
-configuration to use the Dynamic DNS service, thus making the VPN available at **myiot.dynns.com**
+One *can* forward the ports 80 and 81 from the bilgeAlarm as 7800 and 7801 thru THX37 and THX38
+as well for testing in unprotected HTTP mode.
 
-Note that this ONLY works with THX38 which has an actual public IP address.
-This technique could not be used to expose myIOT device (or the piVPN) on THX36 (MarinaAdmin) because
-THX36 is under another layer of routers and does not have a public IP address.
+The VPN only accepts routes to 10.237.37.*, so the bilgeAlarm can be hit from THX36 when
+openVPN is running there at it's "local" address of 10.237.37.120.
 
-## Method 2 = tunnelling port 1194 through to one of the mbeSystems.net SSH ports
+Note that this ONLY works with THX38 which has an actual public IP address, and
+THX38 and THX37 configured correctly to forward port 1194 in and out.
+
+
+## Method 2 - SSH forwarding OpenVPN port 1194 from rPi to mbeSystems.net
+
+This method of tunneling would not require Dynamic DNS or a public IP address.
+
+It has not been implemented or tested.
 
 This *theoretically* has the advantages that (a) it could be used on THX36 and in other
 configurations that don't have public facing IP addresses, behind arbitrarily complex
 LAN configurations, (b) it does not, per se, require a fixed IP address for the rPI,
 and (c) does not require a paying service like noIP.com for Dynamic DNS services.
 
-# General Problem that all Client Traffic is going through piVPN
+
+## General Problem that all Client Traffic is going through piVPN
 
 - I was not able to easily get a good log of all VPN traffic on the rPi.
 - I am surmising traffic usage from the OpenVPN Connect graphic, FAST.COM, and "my ip" websites
@@ -72,3 +76,11 @@ There are still lots of issues with the slowness of webSockets,
 and haven't been able to get an OTA to work from THX36 yet.
 
 It is generally slow.
+
+Eventually, I suppose, the rPi could implement SSDP search to "find" myIOTDevices.
+You can "see" the bilgeAlarm and click on it in the Win10 Explorer Network tab.
+
+The VPN is also providing SSL security, otherwise I could forward ports direc
+
+I might want to forward other ports, like NODE-RED or MQTT (Mosquito Server).
+Using the VPN does not require me to make each service SSL aware,

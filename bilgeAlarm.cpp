@@ -269,7 +269,7 @@ void bilgeAlarm::setup()
     lcd.init();                      // initialize the lcd
     lcd.backlight();
     lcd.setCursor(0,0);
-    lcd.print("bilgeAlarm");
+    lcd.print(0,"bilgeAlarm");
     lcd.setCursor(0,1);
     lcd.print(getVersion());
 
@@ -285,13 +285,83 @@ void bilgeAlarm::setup()
 
     proc_leave();
     LOGD("bilgeAlarm::setup(%s) completed",getVersion());
+
+    lcd.setCursor(0,1);
+    lcd.print("running");
 }
 
+
+//---------------------------------
+// lcdPrint
+//---------------------------------
+// For some reason the "lcd." methods must be called from
+// the same core it lcd.init() was called on, which is
+// ESP32_CORE_ARDUINO=1 as called from Arduino setup() method.
+// I believe the ESP32 Wire I2C library is not multi-core safe.
+// It does not appear to be a synchronization issue, as I only
+// use I2C for the lcd and only rarely call it.  It seems like
+// something more fundamental (i.e. an interrupt or timer) used
+// by the Wire library is not multi-core safe.
+//
+// So, either every task which *might* write to the LCD, including
+// the WS, Serial, MQTT, and even the power Task, would need to
+// run on ESP32_CORE_ARDUINO=1, which pretty much breaks my notions
+// of task architecture, OR we have to enque them in static memory
+// and call them from loop(), which for all of it's messiness, seems
+// the better way to go.
+//
+// I have spent several hours on this.
+// I'm going with LCD_PRINT_DEFERRED
+
+#define LCD_PRINT_DEFERRED 1
+    // this is somewhat equivilant to having a task that init's
+    // the lcd (Wire.begin()) and writes to it the same core
+    // and let's clients set static variables to be written
+
+
+#if LCD_PRINT_DEFERRED
+    static char lcd_buf[2][LCD_LINE_LEN+1];
+    static char lcd_save[2][LCD_LINE_LEN+1];
+
+    void bilgeAlarm::lcdPrint(int line, const char *msg)
+    {
+        LOGD("lcdPrint(%d,%s)",line,msg);
+        char *line_buf = lcd_buf[line];
+        int len = strlen(msg);
+        if (len > LCD_LINE_LEN) len = LCD_LINE_LEN;
+        strncpy(line_buf,msg,len);
+        for (int i=len; i<LCD_LINE_LEN; i++)
+            line_buf[i] = ' ';
+        line_buf[LCD_LINE_LEN] = 0;
+    }
+#else   // LCD_PRINT_DEFERRED
+
+    void bilgeAlarm::lcdPrint(int line, const char *msg)
+    {
+        LOGD("lcdPrint(%d,%s)",line,msg);
+        char line_buf[LCD_LINE_LEN+1];
+        int len = strlen(msg);
+        if (len > LCD_LINE_LEN) len = LCD_LINE_LEN;
+        strncpy(line_buf,msg,len);
+        for (int i=len; i<LCD_LINE_LEN; i++)
+            line_buf[i] = ' ';
+        line_buf[LCD_LINE_LEN] = 0;
+        lcd.setCursor(0,line);
+        lcd.print(line_buf);
+    }
+
+#endif
+
+
+//------------------------------------
+// methods
+//------------------------------------
 
 void bilgeAlarm::suppressError()
 {
     LOGD("suppressError()");
     setAlarmState(_alarm_state | ALARM_STATE_SUPPRESSED);
+    lcdPrint(1,"supress error");
 }
 
 
@@ -305,6 +375,7 @@ void bilgeAlarm::clearError()
         STATE_TOO_OFTEN_DAY |
         STATE_TOO_LONG |
         STATE_CRITICAL_TOO_LONG ));
+    lcdPrint(1,"clear error");
 }
 
 
@@ -456,21 +527,7 @@ void bilgeAlarm::onLcdLine(const myIOTValue *value, const char *val)
 {
     int line = value->getId() == ID_LCD_LINE1 ? 0 : 1;
     LOGD("onLCDLine(%d,%s)",line,val);
-
-    char buf[LCD_LINE_LEN+1];
-    int len = strlen(val);
-    if (len > LCD_LINE_LEN) len = LCD_LINE_LEN;
-    strncpy(buf,val,len);
-    for (int i=len; i<LCD_LINE_LEN; i++)
-        buf[i] = ' ';
-    buf[LCD_LINE_LEN] = 0;
-
-    // PRH - some kind of compiler / stack weirdness resulting in garbage
-    // on the display if compiled without followig LOGD line
-
-    LOGD("buf='%s'",buf);
-    lcd.setCursor(0,line);
-    lcd.print(buf);
+    lcdPrint(line,val);
 }
 
 
@@ -758,4 +815,31 @@ void bilgeAlarm::loop()
         check_sensors = now;
         handleSensors();
     }
+
+    #if 1
+        // was used to prove the LCD is working
+        // as I discovered liquidCrystal_i2C library
+        // dependency on ESP32 core it is init'd on.
+        static uint32_t test_lcd = 0;
+        static int lcd_counter = 0;
+        if (now > test_lcd + 5000)
+        {
+            test_lcd = now;
+            String test = "lcd_test ";
+            test += lcd_counter++;
+            lcdPrint(1,test.c_str());
+        }
+    #endif
+
+    #if LCD_PRINT_DEFERRED
+        for (int line=0; line<2; line++)
+        {
+            if (strcmp(lcd_save[line],lcd_buf[line]))
+            {
+                lcd.setCursor(0,line);
+                lcd.print(lcd_buf[line]);
+                strcpy(lcd_save[line],lcd_buf[line]);
+            }
+        }
+    #endif
 }
