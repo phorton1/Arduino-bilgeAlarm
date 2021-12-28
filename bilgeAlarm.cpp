@@ -816,7 +816,7 @@ void bilgeAlarm::loop()
         handleSensors();
     }
 
-    #if 1
+    #if 0
         // was used to prove the LCD is working
         // as I discovered liquidCrystal_i2C library
         // dependency on ESP32 core it is init'd on.
