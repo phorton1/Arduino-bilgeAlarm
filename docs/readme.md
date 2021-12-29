@@ -46,6 +46,8 @@ and (c) does not require a paying service like noIP.com for Dynamic DNS services
 - I was not able to easily get a good log of all VPN traffic on the rPi.
 - I am surmising traffic usage from the OpenVPN Connect graphic, FAST.COM, and "my ip" websites
 
+### rPi Server configuration
+
 Commented much of rPi /etc/openvpn/server.conf out,
 
 ```
@@ -56,26 +58,51 @@ Commented much of rPi /etc/openvpn/server.conf out,
 # client-to-client
 ```
 
-and added an explicit routing to my IOT device LAN
+And turned on the duplicate-cn option to allow multiple
+clients to use the same client certs(myiot.opvn) opvn file.
 
 ```
-push "route 10.237.37.0 255.255.255.0"
+# PRH uncommented this line
+duplicate-cn
 ```
+
+and after any changes to server.conf, you must then run
 
 ```
 $> sudo systemctl restart openvpn
 ```
 
+### Client OPVN configuration
 
-And it appears to have worked.
+Added the following to /zip/_rpi/_setup/myiot.opvn (which
+must be re-stuck in the openVPN clients on Win and the iPad
+any time it changes, which furthermore requirs the use of
+FileBrowser::openDAV server on the ipad:
+
+```
+# don't pull any routes from the VPN server
+no-pull
+# provide an explicit route to the THX37 (myIOT) subnet
+route 10.237.37.0 255.255.255.0
+```
+
+And it appears to be somewhat working, allowing fast internet,
+yet access to the VPN via THX36, however, at this time, I am
+only connect one device via THX36 to the bilgeAlarm via the
+VPN at a time.  Something to do with websockets.
+
+So ... trying to make a separate myios.opvn for the iPad
+with same password and manual edits.
 
 
 ## NOTES
 
-There are still lots of issues with the slowness of webSockets,
-and haven't been able to get an OTA to work from THX36 yet.
+Bsrely able to get an OTA to work from THX36 yet.
 
-It is generally slow.
+There are still lots of issues with the slowness of webSockets,
+and openVPN disconnects that occur sporadically.
+
+-----------
 
 Eventually, I suppose, the rPi could implement SSDP search to "find" myIOTDevices.
 You can "see" the bilgeAlarm and click on it in the Win10 Explorer Network tab.
