@@ -37,7 +37,8 @@ void setup()
 
     bilge_alarm->setup();
 
-    LOGI("%s version=%s IOTVersion=%s",
+    LOGI("%s(%s) version=%s IOTVersion=%s",
+         bilge_alarm->getDeviceType(),
          bilge_alarm->getName().c_str(),
          bilge_alarm->getVersion(),
          IOT_DEVICE_VERSION);

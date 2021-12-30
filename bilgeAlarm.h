@@ -5,6 +5,10 @@
 
 #include <myIOTDevice.h>
 
+#define BILGE_ALARM             "bilgeAlarm"
+#define BILGE_ALARM_VERSION     "b0.05"
+
+
 //------------------------
 // pins
 //------------------------
@@ -114,7 +118,6 @@
 
 
 
-
 class bilgeAlarm : public myIOTDevice
 {
 public:
@@ -122,7 +125,9 @@ public:
     bilgeAlarm();
     ~bilgeAlarm() {}
 
-    virtual const char *getVersion() override  { return "b0.05"; }
+    virtual const char *getDeviceType() override { return BILGE_ALARM; }
+    virtual const char *getVersion()    override { return BILGE_ALARM_VERSION; }
+
 
     virtual void setup() override;
     virtual void loop() override;
