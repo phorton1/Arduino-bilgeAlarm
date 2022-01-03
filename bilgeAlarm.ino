@@ -31,7 +31,7 @@ void setup()
     #ifdef INIT_SD_EARLY
         delay(200);
         bool sd_ok = SD.begin(5);     // 5
-        LOGI("sd_ok=%d",sd_ok);
+        LOGD("sd_ok=%d",sd_ok);
     #endif
     #endif
 

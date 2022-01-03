@@ -60,7 +60,7 @@ static valueIdType dash_items[] = {
     0
 };
 
-// shat shoes up on the "device" UI tab
+// what shows up on the "device" UI tab
 
 static valueIdType device_items[] = {
     ID_DEMO_MODE,
@@ -235,6 +235,9 @@ int countRuns(uint32_t hours_rep)
 
 bilgeAlarm::bilgeAlarm()
 {
+    _device_type = BILGE_ALARM;
+    _device_version += BILGE_ALARM_VERSION;
+
     bilge_alarm = this;
     addValues(m_bilge_values,NUM_BILGE_VALUES);
     setTabLayouts(dash_items,device_items);

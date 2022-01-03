@@ -125,10 +125,6 @@ public:
     bilgeAlarm();
     ~bilgeAlarm() {}
 
-    virtual const char *getDeviceType() override { return BILGE_ALARM; }
-    virtual const char *getVersion()    override { return BILGE_ALARM_VERSION; }
-
-
     virtual void setup() override;
     virtual void loop() override;
 

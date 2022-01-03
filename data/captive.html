@@ -146,8 +146,8 @@
     var connect_ssid;
     var iot_check_counter = 0;
     var web_socket;
-    var debug_wifi = 0;
-
+    var debug_captive = 0;
+        // #define must be set in myIOTWebSocket for this to be very useful
 
     function setHTMLById(id,html)
     {
@@ -297,8 +297,8 @@
 
     function startCaptive()
     {
-        if (debug_wifi)
-            document.getElementById('debug_wifi').addClass('shown');
+        if (debug_captive)
+            showById('debug_table');
 
         setInterval(function () {
                 setHTMLById("host_status",location.host);
@@ -312,8 +312,10 @@
 
         web_socket.onopen = function(openEvent) {
             console.log("WebSocket OPEN: " + JSON.stringify(openEvent, null, 4));
+            var info_cmd = '{"cmd":"device_info"}';
+            web_socket.send(info_cmd);
             setInterval(function() {
-                web_socket.send(JSON.stringify({cmd:"wifi_status"}));
+                web_socket.send(info_cmd);
             },6000);
 
         };
@@ -359,9 +361,9 @@
                     if (obj.sta_ip)
                         setHTMLById('connect_ip',obj.sta_ip);
 
-                    if (obj.ap_ssid && !device_name)
+                    if (obj.device_name)
                     {
-                        device_name = obj.ap_ssid;
+                        device_name = obj.device_name;
                         document.title = device_name;
                     }
 
@@ -389,7 +391,7 @@
 <table border='0'><tr><td valign='top'>
 <td>
     <br><br>
-    <table id="debug_wifi" width='320px' border='0' class='hidden'>
+    <table id="debug_table" width='320px' border='0' class='hidden'>
         <tr><td width='100px'>Browser</td><td id='browser_status'></td></tr>
         <tr><td>Host</td><td id='host_status'></td></tr>
         <tr><td>&nbsp;</td><td>&nbsp;</td></tr>

@@ -1,11 +1,10 @@
 // prh - might be useful to have a watchdog that reloads the page every so often
 
 const debug_alive = 1;
-const keep_alive_interval = 60000;      // how often to check keep alive
-const keep_alive_timeout = 20000;       // how long to wait for ping response before considering it dead
+const keep_alive_interval = 15000;      // how often to check keep alive
+const keep_alive_timeout = 5000;        // how long to wait for ping response before considering it dead
 const ws_repoen_delay = 3000;           // how long to wait for re-open (allowing for close) after dead
-
-    // 10000 is too quick for connect over VPN ?!?
+    // 10000 is too quick for connect over VPN
 
 // constants that agree with C++ code
 
@@ -230,6 +229,7 @@ function openWebSocket()
         $('#ws_status1').html("WS(" + this.my_id + ") OPENED");
 
         this.opening = 0;
+        sendCommand("device_info");
         sendCommand("spiffs_list");
         sendCommand("value_list");
         this.alive = 1;
