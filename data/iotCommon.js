@@ -1,10 +1,14 @@
+// default definition of is_server
+
+var is_server = 0;
+
+
 // prh - might be useful to have a watchdog that reloads the page every so often
 
 const debug_alive = 1;
 const keep_alive_interval = 15000;      // how often to check keep alive
 const keep_alive_timeout = 5000;        // how long to wait for ping response before considering it dead
 const ws_repoen_delay = 3000;           // how long to wait for re-open (allowing for close) after dead
-    // 10000 is too quick for connect over VPN
 
 // constants that agree with C++ code
 
@@ -43,7 +47,6 @@ const VALUE_STYLE_RETAIN   = 0x0100;      // MQTT if published, will be "retaine
 // program vars
 
 var fake_uuid;
-
 var web_socket;
 var ws_connect_count = 0;
 var ws_open_count = 0;
@@ -204,12 +207,21 @@ var old_socket;
 
 function openWebSocket()
 {
-    // allow for extracting the port+1 from ports other than default 80
+    // is_server connects to HTTPS Server port using
+    // WSS at the url /ws
 
-    var port = location.port;
-    if (port == '')
-        port = '80';
-    var url = 'ws://' + location.hostname + ':' + (parseInt(port) + 1);
+    var url = 'wss://' + location.host + "/ws";
+
+    // !is_server uses HTTP to location.port + 1, or 81 by default
+
+    if (!is_server)
+    {
+        // allow for extracting the port+1 from ports other than default 80
+        var port = location.port;
+        if (port == '')
+            port = '80';
+        url = 'ws://' + location.hostname + ':' + (parseInt(port) + 1);
+    }
 
     console.log("openWebSocket(" + ws_connect_count  + ") to " + url);
     $('#ws_status1').html("WS(" + ws_connect_count + ") O " + url);
@@ -229,9 +241,17 @@ function openWebSocket()
         $('#ws_status1').html("WS(" + this.my_id + ") OPENED");
 
         this.opening = 0;
-        sendCommand("device_info");
-        sendCommand("spiffs_list");
-        sendCommand("value_list");
+
+        if (is_server)
+        {
+            sendCommand("device_list");
+        }
+        else
+        {
+            sendCommand("device_info");
+            sendCommand("spiffs_list");
+            sendCommand("value_list");
+        }
         this.alive = 1;
         setTimeout(keepAlive,keep_alive_interval);
 
@@ -264,82 +284,62 @@ function openWebSocket()
 function handleWS(ws_event)
 {
     var ws_msg = ws_event.data;
-
-//    if (!ws_msg.includes("log_msg") &&
-//        !ws_msg.includes("\"tota;\":") &&           // spiffs_list
-//        !ws_msg.includes("\"values\":") &&          // value_list
-//        !ws_msg.includes("\"device_name\":") &&     // wifi_info
-//        !(ws_msg.includes("set") && ws_msg.includes("DEVICE_AMPS")) &&
-//        !(ws_msg.includes("set") && ws_msg.includes("DEVICE_VOLTS")) &&
-//        (debug_alive || !ws_msg.includes("pong")))
-//        console.log("WebSocket MESSAGE: " + ws_msg);
-
-    // everything else goes through json and we
-    // just check for certain memberrs to update
-    // html or do things.
-
     var obj = JSON.parse(ws_msg);
-    if (obj)
+    if (!obj)
+        return;
+
+    if (obj.error)
+        window.alert("ERROR: " + obj.error);
+    if (obj.pong)
     {
-        if (obj.error)
-            window.alert("ERROR: " + obj.error);
-        if (obj.pong)
+        web_socket.alive = 1;
+        if (debug_alive) console.log("WS:pong");
+    }
+
+    if (obj.set)
+    {
+        // obj.set is the 'id' to set.
+
+        $('.' + obj.set).each(function () {
+            var ele = $(this);
+            if (ele.is("span"))
+                ele.html(obj.value)
+            else if (ele.hasClass("my_switch"))
+                ele.prop("checked",obj.value);
+            else
+                ele.val(obj.value);
+        });
+    }
+
+    if (obj.device_name)
+    {
+        document.title = obj.device_name;
+        $('#my_brand').html(obj.device_name);
+    }
+    if (obj.values)
+        fillTables(obj);
+    if (obj.files)
+        updateSPIFFSList(obj);
+    if (obj.upload_filename)
+    {
+        var pct = obj.upload_progress;
+        $('#upload_pct').html(obj.upload_progress + "%");
+        $('#upload_filename').html(obj.upload_filename);
+        $("#upload_progress").css("width", obj.upload_progress + "%");
+        if (pct >= 100)
         {
-            web_socket.alive = 1;
-            if (debug_alive) console.log("WS:pong");
+            $('#upload_progress_dlg').modal('hide');
+            in_upload = false;
         }
+        if (obj.upload_error)
+            alert("There was a server error while uploading");
+    }
 
-        if (obj.set)
-        {
-            // set is the 'id' to set.
-            // in js, this is part of the class list
-            // below does a loop for all elements that have
-            // id as part of their class list
+    // server specific
 
-            // note that changing an element in the webUI requires
-            // the roundtrip to the server to update all the other
-            // elements
-
-            $('.' + obj.set).each(function () {
-                var ele = $(this);
-                if (ele.is("span"))
-                    ele.html(obj.value)
-                else if (ele.hasClass("my_switch"))
-                    ele.prop("checked",obj.value);
-                else
-                    ele.val(obj.value);
-            });
-        }
-
-        if (obj.device_name)
-        {
-            document.title = obj.device_name;
-            $('#my_brand').html(obj.device_name);
-        }
-        if (obj.values)
-            fillTables(obj);
-        if (obj.files)
-            updateSPIFFSList(obj);
-
-        // if (obj.chart)
-        //     updateChart(obj.chart);
-        if (obj.log_msg)
-            console.log(obj.log_msg);
-
-        if (obj.upload_filename)
-        {
-            var pct = obj.upload_progress;
-            $('#upload_pct').html(obj.upload_progress + "%");
-            $('#upload_filename').html(obj.upload_filename);
-            $("#upload_progress").css("width", obj.upload_progress + "%");
-            if (pct >= 100)
-            {
-                $('#upload_progress_dlg').modal('hide');
-                in_upload = false;
-            }
-            if (obj.upload_error)
-                alert("There was a server error while uploading");
-        }
+    if (obj.device_list)
+    {
+        console.log("device_list=" + ws_msg);
     }
 }
 
@@ -351,7 +351,6 @@ function handleWS(ws_event)
 function updateSPIFFSList(obj)
 {
     $('table#filemanager tbody').empty();
-
     $('#spiffs_used').html(fileKB(obj.used) + " used");
     $('#spiffs_size').html("of " + fileKB(obj.total) + " total");
 
@@ -607,43 +606,7 @@ function onValueChange(evt)
     else
     {
         obj.value = obj.getAttribute('data-value');
-
-        // GRRR - what I want to do is put the focus back on the
-        // element.   Onchange() occurs on a tab key, mouse click,
-        // button, etc.   If they click on another field, it will
-        // receive the focus, no matter what happens.
-        //
-        // The following, refocus the object after 1 ms, SORT OF
-        // works.   But if they click on another field, then BOTH
-        // FIELDS are shown as focused by firefox.
-        //
-        // I tried everything to get rid of the "other" focus,
-        //      $(':focus').blur();
-        //      document.activeElement.blur();
-        //      window.blur()
-        // preventDefault() and stopPropogate() on the event,
-        // and even cascading setTimeouts (one for blur, one for focus)
-        // but could not get reasonable behavior.
-        //
-        // Sheesh, it's not like anyone would ever want to do field level
-        // validation based on the onChangeEvent!!
-        //
-        // Isn't this what everyone would try out of the gate?
-        // The only other thought I have is keboard validation, but
-        // then you have issues with cut-copy-paste, etc.
-        //
-        // And its NOT A FORM so there is no "form validation", which
-        // is what HTML seems to base all of it's "auto-validation" upon.
-        //
-        // GRRR again.
-
-        setTimeout( function() {
-                // setTimeout( function() {
-                    obj.focus();
-                // },1);
-            }, 1);
-        // evt.stopPropagation();
-        // evt.preventDefault();
+        setTimeout( function() { obj.focus(); }, 1);
     }
 }
 
@@ -669,6 +632,16 @@ function confirmDelete(fn)
 function startMyIOT()
 {
     console.log("startMyIOT()");
+
+    // we identify if this is being served from the rPi
+    // by whether or not the protocol is https
+
+    is_server = (location.protocol == 'https:');
+
+    // If so, we are going to change the deviceName thing to a pulldown
+    // that contains a list of device, select the first device we find,
+    // and set our websocket context to it, THEN issue the typical
+    // startup (device_info, value_list, and spiffs_list) ws commands
 
     fake_uuid = 'xxxxxxxx'.replace(/[x]/g, (c) => {
         const r = Math.floor(Math.random() * 16);
