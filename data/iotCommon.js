@@ -50,6 +50,8 @@ var fake_uuid;
 var web_socket;
 var ws_connect_count = 0;
 var ws_open_count = 0;
+var device_name = '';
+var device_uuid = '';
 
 
 var file_request_num = 0;
@@ -144,7 +146,10 @@ function uploadFiles(evt)
     }
 
     xhr.open("POST", "/" + id  + args, true);
-    xhr.setRequestHeader('X-Requested-With','XMLHttpRequest');
+    // xhr.setRequestHeader('X-Requested-With','XMLHttpRequest');
+    if (device_uuid)
+        xhr.setRequestHeader('x-myiot-deviceuuid',device_uuid);
+
     in_upload = true;
     xhr.send(formData);
 }
@@ -169,7 +174,9 @@ function sendCommand(command,params)
 
 function checkAlive()
 {
-    if (in_upload || !web_socket || web_socket.opening || web_socket.closing)
+    // if (in_upload ||
+
+    if (!web_socket || web_socket.opening || web_socket.closing)
         return;
     if (debug_alive)
         console.log("checkAlive web_socket(" + web_socket.my_id + ")");
@@ -192,7 +199,9 @@ function checkAlive()
 
 function keepAlive()
 {
-    if (in_upload || !web_socket || !web_socket.alive || web_socket.opening || web_socket.closing)
+    // if (in_upload ||
+
+    if (!web_socket || !web_socket.alive || web_socket.opening || web_socket.closing)
         return;
     if (debug_alive)
         console.log("keepAlive web_socket(" + web_socket.my_id + ")");
@@ -313,8 +322,12 @@ function handleWS(ws_event)
 
     if (obj.device_name)
     {
-        document.title = obj.device_name;
-        $('#my_brand').html(obj.device_name);
+        device_name = obj.device_name;
+        device_uuid = obj.uuid;
+        console.log("device_name=" + device_name + " device_uuid=$uuid");
+        if (!is_server)
+            document.title = device_name;
+        $('#my_brand').html(device_name);
     }
     if (obj.values)
         fillTables(obj);
