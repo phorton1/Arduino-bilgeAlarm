@@ -19,12 +19,15 @@
 
 <nav class="navbar navbar-dark bg-dark">
     <div class="container-fluid">
-        <a class="navbar-brand" href="#">
-            <span id='my_brand'>myIOT Demo</span>
-            &nbsp;<span id='ws_status1'>&nbsp;</span>
+        <div a class="navbar-brand"> <!- href="#"-->
+			<select id='device_list' onChange='onChangeDevice(event)'>myIOT Demo</select>
+			<span id='DEVICE_NAME' class='navbar-brand' onChange='onChangeDevice(event)'>myIOT Demo</span>
+            &nbsp;<span id='ws_status1' class='small'>&nbsp;</span>
             &nbsp;&nbsp;&nbsp;&nbsp;
-            &nbsp;<span id='ws_status2'>&nbsp;</span>
-        </a>
+            &nbsp;<span id='ws_status2' class='small'>&nbsp;</span>
+    		&nbsp;&nbsp;&nbsp;&nbsp;
+            &nbsp;<span id='device_status' class='small'>&nbsp;</span>
+        </div>
         <ul class="nav nav-dark nav-pills" id="my_nav_buttons" role="tablist">
             <li class="nav-item">
                 <button
@@ -136,14 +139,14 @@
                     <th>
                         Name
                         <label htmlFor="spiffs_files">
-                            <button class='btn btn-secondary' onclick="onUploadClick('spiffs_files')">upload</button>
+                            <button class='btn btn-secondary myiot' onclick="onUploadClick('spiffs_files')">upload</button>
                         </label>
-                        <input type="file" multiple id="spiffs_files" onchange="uploadFiles(event)" style="display:none"/>
+                        <input type="file" multiple id="spiffs_files" class='myiot' onchange="uploadFiles(event)" style="display:none"/>
 
                         <label htmlFor="ota_files">
-                            <button class='btn btn-secondary' onclick="onUploadClick('ota_files')">OTA</button>
+                            <button class='btn btn-secondary myiot' onclick="onUploadClick('ota_files')">OTA</button>
                         </label>
-                        <input type="file" id="ota_files" onchange="uploadFiles(event)" style="display:none"/>
+                        <input type="file" id="ota_files" class='myiot' onchange="uploadFiles(event)" style="display:none"/>
                     </th>
                     <th id='spiffs_used'>Size</th>
                     <th id='spiffs_size'>&nbsp;</th>

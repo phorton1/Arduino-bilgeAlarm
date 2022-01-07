@@ -113,7 +113,7 @@ const valDescriptor bilgeAlarm::m_bilge_values[] =
     { ID_SUPPRESS,         VALUE_TYPE_COMMAND,  VALUE_STORE_MQTT_SUB, VALUE_STYLE_NONE,       NULL,                     (void *) suppressError },
     { ID_CLEAR_ERROR,      VALUE_TYPE_COMMAND,  VALUE_STORE_MQTT_SUB, VALUE_STYLE_NONE,       NULL,                     (void *) clearError },
 
-    { ID_STATE,            VALUE_TYPE_BENUM,    VALUE_STORE_TOPIC,    VALUE_STYLE_READONLY,   (void *) &_state,         NULL,   { .enum_range = { 4, systemStates }} },
+    { ID_STATE,            VALUE_TYPE_BENUM,    VALUE_STORE_PUB,      VALUE_STYLE_READONLY,   (void *) &_state,         NULL,   { .enum_range = { 4, systemStates }} },
     { ID_ALARM_STATE,      VALUE_TYPE_BENUM,    VALUE_STORE_TOPIC,    VALUE_STYLE_LONG,       (void *) &_alarm_state,   NULL,   { .enum_range = { 4, alarmStates }} },
 
     { ID_DISABLED,         VALUE_TYPE_BOOL,     VALUE_STORE_PREF,     VALUE_STYLE_NONE,       (void *) &_disabled,      (void *) onDisabled,   { .int_range = { DEFAULT_DISABLED, 0, 1}} },

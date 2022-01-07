@@ -53,6 +53,8 @@ var ws_open_count = 0;
 var device_name = '';
 var device_uuid = '';
 
+var device_list;
+
 
 var file_request_num = 0;
 var in_upload = false;
@@ -175,6 +177,9 @@ function sendCommand(command,params)
 function checkAlive()
 {
     // if (in_upload ||
+    // I used to not do this if in_upload due to perceived timing issues in uploads
+    // however, the myIOTServer needs the pings for it's own alive detection
+    // and it seems to work, so I am re-instituting pings durin uploads
 
     if (!web_socket || web_socket.opening || web_socket.closing)
         return;
@@ -200,7 +205,6 @@ function checkAlive()
 function keepAlive()
 {
     // if (in_upload ||
-
     if (!web_socket || !web_socket.alive || web_socket.opening || web_socket.closing)
         return;
     if (debug_alive)
@@ -318,6 +322,12 @@ function handleWS(ws_event)
             else
                 ele.val(obj.value);
         });
+
+        if (obj.set == 'DEVICE_BOOTING')
+        {
+            $('.myiot').attr("disabled",1);
+            $('#device_status').html('rebooting');
+        }
     }
 
     if (obj.device_name)
@@ -327,7 +337,7 @@ function handleWS(ws_event)
         console.log("device_name=" + device_name + " device_uuid=$uuid");
         if (!is_server)
             document.title = device_name;
-        $('#my_brand').html(device_name);
+        $('#DEVICE_NAME').html(device_name);
     }
     if (obj.values)
         fillTables(obj);
@@ -350,10 +360,49 @@ function handleWS(ws_event)
 
     // server specific
 
+    if (typeof obj.ws_open != 'undefined')
+    {
+        var cur = $('#device_status').html();
+        cur = cur.startsWith('rebooting') ? 'rebooting ' : '';
+        cur += obj.ws_open ? 'ws_open' : 'ws_closed';
+        $('#device_status').html(cur);
+        $('.myiot').attr("disabled",!obj.ws_open);
+    }
+
     if (obj.device_list)
     {
         console.log("device_list=" + ws_msg);
+        device_list = obj.device_list;
+        var the_list = $('#device_list');
+        the_list.empty();
+
+        for (var i=0; i<device_list.length; i++)
+        {
+            var device = device_list[i];
+            if (i == 0)
+            {
+                device_name = device.name;
+                device_uuid = device.uuid;
+            }
+            var option = $("<option>").attr('value',device.uuid).text(device.name);
+            the_list.append(option);
+        }
+        if (device_uuid)
+        {
+            the_list.val(device_uuid);
+            sendCommand("set_context",{uuid:device_uuid});
+        }
     }
+}
+
+
+
+function onChangeDevice(evt)
+{
+    var obj = evt.target;
+    var value = obj.value;
+    // alert("onDeviceChange(" + value + "");
+    sendCommand("set_context",{uuid:value});
 }
 
 
@@ -367,12 +416,19 @@ function updateSPIFFSList(obj)
     $('#spiffs_used').html(fileKB(obj.used) + " used");
     $('#spiffs_size').html("of " + fileKB(obj.total) + " total");
 
+    // note that file links, which open in another tab,
+    // are NOT disabled during reboot/ws_close events,
+    // BUT, they WILL fail in the server if the device
+    // WS is closed.
+
     for (var i=0; i<obj.files.length; i++)
     {
         var file = obj.files[i];
-        var link = '<a href="/' + file.name + '">' + file.name + '</a>';
+        var link = '<a class="myiot" ' +
+            'target=”_blank” ' +
+            'href="/' + file.name + '">' + file.name + '</a>';
         var button = "<button " +
-            "class='btn btn-secondary' " +
+            "class='btn btn-secondary myiot' " +
             // "class='my_trash_can' " +
             "onclick='confirmDelete(\"" + file.name + "\")'>" +
             "delete" +
@@ -391,12 +447,15 @@ function updateSPIFFSList(obj)
 
 function addSelect(item)
 {
-    var input = $('<select>').addClass(item.id).attr({
-        name : item.id,
-        onchange : 'onValueChange(event)',
-        'data-type' : item.type,
-        'data-value' : item.value
-    });
+    var input = $('<select>')
+        .addClass(item.id)
+        .addClass('myiot')
+        .attr({
+            name : item.id,
+            onchange : 'onValueChange(event)',
+            'data-type' : item.type,
+            'data-value' : item.value
+        });
 
     var options = item.allowed.split(",");
     for (var i=0; i<options.length; i++)
@@ -421,6 +480,7 @@ function addInput(item)
 
     var input = $('<input>')
         .addClass(item.id)
+        .addClass('myiot')
         .attr({
             name : item.id,
             type : input_type,
@@ -448,7 +508,10 @@ function addInput(item)
 function addSwitch(item)
 {
     var input = $('<input />')
-        .addClass('form-check-input my_switch ' + item.id)
+        .addClass(item.id)
+        .addClass('myiot')
+        .addClass('form-check-input')
+        .addClass('my_switch')
         .attr({
             name: item.id,
             type: 'checkbox',
@@ -473,6 +536,7 @@ function addOutput(item)
 function addButton(item)
 {
     return $('<button />')
+        .addClass('myiot')
         .attr({
             id: item.id,
             'data-verify' : (item.style & VALUE_STYLE_VERIFY ? true : false),
@@ -522,10 +586,27 @@ function fillTable(values,ids,tbody)
 
 function fillTables(obj)
     // fill the prefs, topics, and dashboard tables from the value list
+    // this is the signal that the device is really online
+    // so we clear the reboot/ws_closed "status" text, and assume
+    // all (new) controls are enabled ...
 {
+    $('#device_status').html('');
+
     fillTable(obj.values,obj.system_items,$('table#system_table tbody'));
     fillTable(obj.values,obj.device_items,$('table#device_table tbody'));
     fillTable(obj.values,obj.dash_items,$('table#dashboard_table tbody'));
+
+    if (obj.values['DEVICE_BOOTING'] &&
+        obj.values['DEVICE_BOOTING'].value)
+    {
+        $('.myiot').attr("disabled",1);
+        $('#device_status').html('rebooting');
+    }
+
+    // but what about the buttons on the spiffs_list?
+
+    // else
+    //     $('.myiot').attr("disabled",0);
 }
 
 
@@ -650,6 +731,10 @@ function startMyIOT()
     // by whether or not the protocol is https
 
     is_server = (location.protocol == 'https:');
+    if (is_server)
+        $('#DEVICE_NAME').addClass('hidden');
+    else
+        $('#device_list').addClass('hidden');
 
     // If so, we are going to change the deviceName thing to a pulldown
     // that contains a list of device, select the first device we find,
