@@ -52,7 +52,7 @@ void loop()
 {
     bilge_alarm->loop();
 
-    #if 1
+    #if TEST_VRSION
         if (bilge_alarm->getBool(ID_DEMO_MODE))
         {
             uint32_t now = millis();

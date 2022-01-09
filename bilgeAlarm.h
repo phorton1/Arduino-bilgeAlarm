@@ -1,6 +1,30 @@
 //-----------------------------------
 // bilgeAlarm.h
 //-----------------------------------
+// PRH - could easily add something like a "notes" or "since last check"
+// that would keep track of the number of runs, maximum duration,
+// any alarms (i.e. including the self clearing count alarms) since
+// it was last cleared manually.
+
+// TODO:
+//
+//    - ui for time fields with VALUE_STYLE_TIME_SINCE potential style (on Interval)
+//    - device_specific UI for ID_DUR_LAST_RUN to count in the UI if it's zero (and maybe a style to add "secs" to the READONLY field)
+//    - WS2812 LEDs
+//    - THE WHOLE BUTTON/LCD UI
+//    - Revisit device power monitoring (perhaps a runtime param ?!?!)
+//    - SD Card Basics // fileServer compatible (through myIOTServer?)
+//    - LOGU/LOGI to SD card logfiles (by month?)
+//    - bilgeAlarm graph from SD logfile(s)
+//    - UI layout
+//    - device specific "widget" (guages, etc)
+//    - Server to serve page with multiple device widgets (that declare them)
+//    - circuit board (connectors particularly) & 3D printed housing
+//    - mount and test in-situ
+//    - lightSwitch device (for testing from apartment)
+//    - myIOTDevice UI with at least reboot
+//    - rPi remote management - i.e. logrotate, webMin, etc
+
 #pragma once
 
 #include <myIOTDevice.h>
@@ -8,6 +32,9 @@
 #define BILGE_ALARM             "bilgeAlarm"
 #define BILGE_ALARM_VERSION     "b0.05"
 
+
+#define TEST_VERSION         0
+    // includes LEDs, DEMO_MODE, and LCD_LINES
 
 //------------------------
 // pins
@@ -44,10 +71,24 @@
 
 #define ID_STATE            "STATE"
 #define ID_ALARM_STATE      "ALARM_STATE"
+#define ID_TIME_LAST_RUN    "TIME_LAST_RUN"
+#define ID_DUR_LAST_RUN     "DUR_LAST_RUN"
+#define ID_NUM_LAST_HOUR    "NUM_LAST_HOUR"
+#define ID_NUM_LAST_DAY     "NUM_LAST_DAY"
 
 #define ID_FORCE_RELAY      "FORCE_RELAY"           // the user command (switch) to force the relay on or off
-#define ID_SUPPRESS         "SUPPRESS"              // the user command (button) to suppress the alarm sound
-#define ID_CLEAR_ERROR      "CLEAR"                 // the user command (button) to clear the current error
+#define ID_SUPPRESS         "SUPPRESS_ALARM"        // the user command (button) to suppress the alarm sound
+#define ID_CLEAR_ERROR      "CLEAR_ERROR"           // the user command (button) to clear the current error
+#define ID_CLEAR_HISTORY    "CLEAR_HISTORY"         // the user command (button) to clear the run_history
+    // There are a number of scenarios about handling ALARMS.
+    // I press the SUPPRESS button to supress the alarm from ringing.
+    // The TOO_LONG, CRITICAL_TOO_LONG, and EMERGENCY alarms are correctly cleared by CLEAR_ERROR.
+    // The TOO_MANY_PER_HOUR and TOO_MANY_PER_DAY errors will be sort-of handled by CLEAR_ERROR,
+    //     in that they won't re-invoke until the pump comes back on again.  If it is after an
+    //     appropriate interval, the system will normalize.    Finally, one can REBOOT or
+    //     use CLEAR_HISTORY to clear the historical data and the TOO_MANY_PER counters will
+    //     start over.  For good measure, CLEAR_HISTORY also calls CLEAR_ERROR.
+    // In any case, all of it's in the log files.
 
 #define ID_DISABLED         "DISABLED"              // enabled,disabled = LEDs still light, but no errors, extra runs, or other functionality will take place
 #define ID_BACKLIGHT_SECS   "BACKLIGHT_SECS"        // off,secs = backlight will turn off if no buttons pressed after this many seconds
@@ -73,12 +114,13 @@
 #define ID_RUN_EMERGENCY    "RUN_EMERGENCY"         // off,secs - how long to turn on the relay as long as the emergency switch turns on
     // This will run the main pump if the emergency pump turns on, and continue running it for N more seconds than the emergency pump
 
-#define ID_ONBOARD_LED      "ONBOARD_LED"
-#define ID_OTHER_LED        "OTHER_LED"
-#define ID_DEMO_MODE        "DEMO_MODE"
-
-#define ID_LCD_LINE1        "LCD_LINE1"
-#define ID_LCD_LINE2        "LCD_LINE2"
+#if TEST_VERSION
+    #define ID_ONBOARD_LED      "ONBOARD_LED"
+    #define ID_OTHER_LED        "OTHER_LED"
+    #define ID_DEMO_MODE        "DEMO_MODE"
+    #define ID_LCD_LINE1        "LCD_LINE1"
+    #define ID_LCD_LINE2        "LCD_LINE2"
+#endif
 
 
 //------------------------
@@ -136,6 +178,10 @@ private:
 
     static uint32_t _state;
     static uint32_t _alarm_state;
+    static time_t   _time_last_run;
+    static int      _dur_last_run;
+    static int      _num_last_hour;
+    static int      _num_last_day;
 
     static bool _disabled;
     static int  _backlight_secs;
@@ -152,12 +198,14 @@ private:
     static int  _relay_debounce;
 
     static bool _FORCE_RELAY;
-    static bool _ONBOARD_LED;
-    static bool _OTHER_LED;
-    static bool _DEMO_MODE;
 
-    static String _lcd_line1;
-    static String _lcd_line2;
+    #if TEST_VERSION
+        static bool _ONBOARD_LED;
+        static bool _OTHER_LED;
+        static bool _DEMO_MODE;
+        static String _lcd_line1;
+        static String _lcd_line2;
+    #endif
 
     // working vars
 
@@ -167,26 +215,32 @@ private:
     static uint32_t m_relay_time;
     static bool     m_suppress_next_after;
 
-    static uint32_t m_start_duration;
+    static time_t   m_start_duration;
+    static time_t   m_clear_time;
 
     // methods
 
     static void clearError();
+    static void clearHistory();
     static void suppressError();
     static void setState(uint32_t state);
     static void setAlarmState(uint32_t alarm_state);
     static void alarmTask(void *param);
 
-    static void onLed(const myIOTValue *desc, bool val);
-    static void onLcdLine(const myIOTValue *desc, const char *val);
-    static void onForceRelay(const myIOTValue *desc, bool val);
-    static void onDisabled(const myIOTValue *desc, bool val);
-
     void handleSensors();
     void handleButtons();
+    void startRun();
+    void endRun();
+    int countRuns(int hours);
+
+    static void onForceRelay(const myIOTValue *desc, bool val);
+    static void onDisabled(const myIOTValue *desc, bool val);
+    #if TEST_VERSION
+        static void onLed(const myIOTValue *desc, bool val);
+        static void onLcdLine(const myIOTValue *desc, const char *val);
+    #endif
 
     static void lcdPrint(int line, const char *msg);
-
 };
 
 
