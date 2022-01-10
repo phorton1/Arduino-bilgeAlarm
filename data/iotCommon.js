@@ -18,6 +18,7 @@ const VALUE_TYPE_CHAR    = 'C';        // a single character
 const VALUE_TYPE_STRING  = 'S';        // a string
 const VALUE_TYPE_INT     = 'I';        // a signed 32 bit integer
 const VALUE_TYPE_FLOAT   = 'F';        // a float
+const VALUE_TYPE_TIME    = 'T'         // time stored as 32 bit unsigned integer; string in UI
 const VALUE_TYPE_ENUM    = 'E';        // a enumerated integer
 
 const VALUE_STORE_PROG     = 0x00;      // only in ESP32 memory
@@ -31,17 +32,14 @@ const VALUE_STORE_SERIAL   = 0x40;
 const VALUE_STORE_PREF     = (VALUE_STORE_NVS | VALUE_STORE_WS);
 const VALUE_STORE_TOPIC    = (VALUE_STORE_MQTT_PUB | VALUE_STORE_MQTT_SUB);
 
-const VALUE_TAB_SYSTEM     = 0x01;
-const VALUE_TAB_DEVICE     = 0x02;
-const VALUE_TAB_DASH       = 0x04;
-
-const VALUE_STYLE_NONE     = 0x0000;      // no special styling
-const VALUE_STYLE_READONLY = 0x0001;      // Value may not be modified
-const VALUE_STYLE_REQUIRED = 0x0002;      // String item may not be blank
-const VALUE_STYLE_PASSWORD = 0x0004;      // displayed as '********', protected in debugging, etc. Gets "retype" dialog in UI
-const VALUE_STYLE_VERIFY   = 0x0010;      // UI buttons will display a confirm dialog
-const VALUE_STYLE_LONG     = 0x0020;      // UI will show a long (rather than default 15ish) String Input Control
-const VALUE_STYLE_RETAIN   = 0x0100;      // MQTT if published, will be "retained"
+const VALUE_STYLE_NONE       = 0x0000;      // no special styling
+const VALUE_STYLE_READONLY   = 0x0001;      // Value may not be modified
+const VALUE_STYLE_REQUIRED   = 0x0002;      // String item may not be blank
+const VALUE_STYLE_PASSWORD   = 0x0004;      // displayed as '********', protected in debugging, etc. Gets "retype" dialog in UI
+const VALUE_STYLE_TIME_SINCE = 0x0008       // ui shows '23 minutes ago' in addition to the time string
+const VALUE_STYLE_VERIFY     = 0x0010;      // UI buttons will display a confirm dialog
+const VALUE_STYLE_LONG       = 0x0020;      // UI will show a long (rather than default 15ish) String Input Control
+const VALUE_STYLE_RETAIN     = 0x0100;      // MQTT if published, will be "retained"
 
 
 // program vars
@@ -315,6 +313,10 @@ function handleWS(ws_event)
 
         $('.' + obj.set).each(function () {
             var ele = $(this);
+            var data_value = ele.attr('data-value');
+            if (typeof(data_value) != 'undefined')
+                ele.attr({'data-value' : obj.value});
+
             if (ele.is("span"))
                 ele.html(obj.value)
             else if (ele.hasClass("my_switch"))
@@ -524,12 +526,49 @@ function addSwitch(item)
 }
 
 
+
+function pad(num, size) {
+    var num = num.toString();
+    while (num.length < size) num = "0" + num;
+    return num;
+}
+
+function formatSince(tm)
+{
+    if (tm == 0)
+        return '';
+    const now = new Date()
+    const myMilllisecondsSinceEpoch = now.getTime();   //  + (now.getTimezoneOffset() * 60 * 1000)
+    const mySecondsSinceEpoch = Math.round(myMilllisecondsSinceEpoch / 1000)
+
+    var secs = mySecondsSinceEpoch - tm;
+    if (secs <= 0)
+        return '';
+
+    var hours = parseInt(secs / 3600);
+    secs -= hours * 3600;
+    var mins = parseInt(secs / 60);
+    secs -= mins * 60;
+    return pad(hours,2) + ':' + pad(mins,2) + ':' + pad(secs,2);
+}
+
+
+
 function addOutput(item)
     // outputs are only colleced by class==item.id
 {
-    return $('<span>')
-        .addClass(item.id)
-        .html(item.value);
+    var obj = $('<span>').addClass(item.id)
+    if (item.style & VALUE_STYLE_TIME_SINCE)
+    {
+        // the value is the time as an integer
+
+        obj.addClass('time_since');
+        obj.attr({'data-value' : item.value});
+        obj.html(formatSince(item.value));
+    }
+    else
+        obj.html(item.value);
+    return obj;
 }
 
 
@@ -592,8 +631,8 @@ function fillTables(obj)
 {
     $('#device_status').html('');
 
-    fillTable(obj.values,obj.system_items,$('table#system_table tbody'));
     fillTable(obj.values,obj.device_items,$('table#device_table tbody'));
+    fillTable(obj.values,obj.config_items,$('table#config_table tbody'));
     fillTable(obj.values,obj.dash_items,$('table#dashboard_table tbody'));
 
     if (obj.values['DEVICE_BOOTING'] &&
@@ -706,7 +745,7 @@ function onValueChange(evt)
 
 
 //------------------------------------------------
-// click handlers
+// click and interval handlers
 //------------------------------------------------
 
 function confirmDelete(fn)
@@ -717,6 +756,23 @@ function confirmDelete(fn)
     }
 }
 
+
+function updateTimers()
+{
+
+    $('.time_since').each(function () {
+        var ele = $(this);
+        var val = ele.attr('data-value');
+        var str = '';
+        if (val != 0)
+            str = formatSince(val);
+
+        if (ele.is("span"))
+            ele.html(str)
+        else
+            ele.val(str);
+    });
+}
 
 //------------------------------------------------
 // startMyIOT()
@@ -746,6 +802,8 @@ function startMyIOT()
         return r.toString(16);  });
 
     openWebSocket();
+
+    setInterval(updateTimers,200);
 
     // initChart();
 }

@@ -73,6 +73,7 @@
 #define ID_ALARM_STATE      "ALARM_STATE"
 #define ID_TIME_LAST_RUN    "TIME_LAST_RUN"
 #define ID_DUR_LAST_RUN     "DUR_LAST_RUN"
+#define ID_SINCE_LAST_RUN   "SINCE_LAST_RUN"
 #define ID_NUM_LAST_HOUR    "NUM_LAST_HOUR"
 #define ID_NUM_LAST_DAY     "NUM_LAST_DAY"
 
@@ -179,6 +180,7 @@ private:
     static uint32_t _state;
     static uint32_t _alarm_state;
     static time_t   _time_last_run;
+    static int      _since_last_run;   // time_last_run as an int
     static int      _dur_last_run;
     static int      _num_last_hour;
     static int      _num_last_day;

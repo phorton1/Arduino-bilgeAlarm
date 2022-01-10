@@ -52,10 +52,11 @@
 static valueIdType dash_items[] = {
     ID_STATE,
     ID_ALARM_STATE,
-    ID_TIME_LAST_RUN,
-    ID_DUR_LAST_RUN,
     ID_NUM_LAST_HOUR,
     ID_NUM_LAST_DAY,
+    ID_SINCE_LAST_RUN,
+    ID_TIME_LAST_RUN,
+    ID_DUR_LAST_RUN,
     ID_SUPPRESS,
     ID_CLEAR_ERROR,
     ID_CLEAR_HISTORY,
@@ -80,7 +81,7 @@ static valueIdType dash_items[] = {
 
 // what shows up on the "device" UI tab
 
-static valueIdType device_items[] = {
+static valueIdType config_items[] = {
 #if TEST_VERSION
     ID_DEMO_MODE,
 #endif
@@ -141,7 +142,8 @@ const valDescriptor bilgeAlarm::m_bilge_values[] =
     { ID_STATE,            VALUE_TYPE_BENUM,    VALUE_STORE_PUB,      VALUE_STYLE_READONLY,   (void *) &_state,         NULL,   { .enum_range = { 4, systemStates }} },
     { ID_ALARM_STATE,      VALUE_TYPE_BENUM,    VALUE_STORE_TOPIC,    VALUE_STYLE_LONG,       (void *) &_alarm_state,   NULL,   { .enum_range = { 4, alarmStates }} },
     { ID_STATE,            VALUE_TYPE_BENUM,    VALUE_STORE_PUB,      VALUE_STYLE_READONLY,   (void *) &_state,         NULL,   { .enum_range = { 4, systemStates }} },
-    { ID_TIME_LAST_RUN,    VALUE_TYPE_TIME,     VALUE_STORE_PUB,      VALUE_STYLE_HIST_TIME,  (void *) &_time_last_run, NULL,   },
+    { ID_TIME_LAST_RUN,    VALUE_TYPE_TIME,     VALUE_STORE_PUB,      VALUE_STYLE_READONLY,   (void *) &_time_last_run, },
+    { ID_SINCE_LAST_RUN,   VALUE_TYPE_INT,      VALUE_STORE_PUB,      VALUE_STYLE_HIST_TIME,  (void *) &_since_last_run,NULL,  { .int_range = { 0, -DEVICE_MAX_INT-1, DEVICE_MAX_INT}}  },
     { ID_DUR_LAST_RUN,     VALUE_TYPE_INT,      VALUE_STORE_PUB,      VALUE_STYLE_READONLY,   (void *) &_dur_last_run,  NULL,   { .int_range = { 0, 0, 32767}}  },
     { ID_NUM_LAST_HOUR,    VALUE_TYPE_INT,      VALUE_STORE_PUB,      VALUE_STYLE_READONLY,   (void *) &_num_last_hour, NULL,   { .int_range = { 0, 0, 32767}}  },
     { ID_NUM_LAST_DAY,     VALUE_TYPE_INT,      VALUE_STORE_PUB,      VALUE_STYLE_READONLY,   (void *) &_num_last_day,  NULL,   { .int_range = { 0, 0, 32767}}  },
@@ -165,7 +167,7 @@ const valDescriptor bilgeAlarm::m_bilge_values[] =
 #if TEST_VERSION
     { ID_ONBOARD_LED,      VALUE_TYPE_BOOL,     VALUE_STORE_TOPIC,    VALUE_STYLE_NONE,       (void *) &_ONBOARD_LED,    (void *) onLed, },
     { ID_OTHER_LED,        VALUE_TYPE_BOOL,     VALUE_STORE_TOPIC,    VALUE_STYLE_NONE,       (void *) &_OTHER_LED,      (void *) onLed, },
-    { ID_DEMO_MODE,        VALUE_TYPE_BOOL,     VALUE_STORE_PREF,     VALUE_STYLE_NONE,       (void *) &_DEMO_MODE,       NULL,          },
+    { ID_DEMO_MODE,        VALUE_TYPE_BOOL,     VALUE_STORE_PREF,     VALUE_STYLE_NONE,       (void *) &_DEMO_MODE,      },
     { ID_LCD_LINE1,        VALUE_TYPE_STRING,   VALUE_STORE_TOPIC,    VALUE_STYLE_LONG,       (void *) &_lcd_line1,      (void *) onLcdLine },
     { ID_LCD_LINE2,        VALUE_TYPE_STRING,   VALUE_STORE_TOPIC,    VALUE_STYLE_LONG,       (void *) &_lcd_line2,      (void *) onLcdLine },
 #endif
@@ -178,6 +180,7 @@ const valDescriptor bilgeAlarm::m_bilge_values[] =
 uint32_t bilgeAlarm::_state;
 uint32_t bilgeAlarm::_alarm_state;
 time_t   bilgeAlarm::_time_last_run;
+int      bilgeAlarm::_since_last_run;
 int      bilgeAlarm::_dur_last_run;
 int      bilgeAlarm::_num_last_hour;
 int      bilgeAlarm::_num_last_day;
@@ -265,6 +268,7 @@ void bilgeAlarm::startRun()
     ptr->tm = now;
     ptr->dur = 0;
     setTime(ID_TIME_LAST_RUN,now);
+    setInt(ID_SINCE_LAST_RUN,(int32_t)now);
     setInt(ID_DUR_LAST_RUN,0);
 }
 
@@ -324,7 +328,7 @@ bilgeAlarm::bilgeAlarm()
 
     bilge_alarm = this;
     addValues(m_bilge_values,NUM_BILGE_VALUES);
-    setTabLayouts(dash_items,device_items);
+    setTabLayouts(dash_items,config_items);
 }
 
 
