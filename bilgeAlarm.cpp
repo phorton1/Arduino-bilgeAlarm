@@ -323,9 +323,6 @@ int bilgeAlarm::countRuns(int hours)
 
 bilgeAlarm::bilgeAlarm()
 {
-    _device_type = BILGE_ALARM;
-    _device_version += BILGE_ALARM_VERSION;
-
     bilge_alarm = this;
     addValues(m_bilge_values,NUM_BILGE_VALUES);
     setTabLayouts(dash_items,config_items);

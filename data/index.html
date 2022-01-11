@@ -58,6 +58,15 @@
             </li>
             <li class="nav-item">
                 <button
+                    class="nav-link my_nav_link hidden"
+                    id="sdcard_button"
+                    data-bs-toggle="tab"
+                    data-bs-target="#sdcard">
+                    SD
+                </button>
+            </li>
+            <li class="nav-item">
+                <button
                     class="nav-link my_nav_link"
                     id="spiffs_button"
                     data-bs-toggle="tab"
@@ -130,10 +139,34 @@
     </div>
 
 
+   <!-- SDCard tab -->
+
+    <div id="sdcard" class="tab-pane fade">
+        <table id='sdcard_list' class='table' >
+            <thead>
+                <tr>
+                    <th>
+                        Name
+                        <label htmlFor="sdcard_files">
+                            <button class='btn btn-secondary myiot' onclick="onUploadClick('sdcard_files')">upload</button>
+                        </label>
+                        <input type="file" multiple id="sdcard_files" class='myiot' onchange="uploadFiles(event)" style="display:none"/>
+                    </th>
+                    <th id='sdcard_used'>Size</th>
+                    <th id='sdcard_size'>&nbsp;</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr><td>test</td><td>2</td><td>&nbsp;</td></tr>
+            </tbody>
+        </table>
+    </div>
+
+
     <!-- SPIFFS tab -->
 
     <div id="spiffs" class="tab-pane fade">
-        <table id='filemanager' class='table' >
+        <table id='spiffs_list' class='table' >
             <thead>
                 <tr>
                     <th>

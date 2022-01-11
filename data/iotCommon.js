@@ -50,15 +50,22 @@ var ws_connect_count = 0;
 var ws_open_count = 0;
 var device_name = '';
 var device_uuid = '';
-
+var device_has_sd = 0;
 var device_list;
-
-
 var file_request_num = 0;
-var in_upload = false;
-    // the ws socket keepalive mechanism is disabled
-    // while in an upload ..
+var cur_button = 'dashboard_button';
 
+
+function onTab(event)
+    // triggered when the user changes tabs in the UI
+{
+    cur_button = event.target.id;
+}
+
+
+//--------------------------------
+// display utilities
+//--------------------------------
 
 function fileKB(i)
 {
@@ -84,6 +91,33 @@ function fileKB(i)
         rslt = i;
     }
     return rslt;
+}
+
+
+function pad(num, size) {
+    var num = num.toString();
+    while (num.length < size) num = "0" + num;
+    return num;
+}
+
+
+function formatSince(tm)
+{
+    if (tm == 0)
+        return '';
+    const now = new Date()
+    const myMilllisecondsSinceEpoch = now.getTime();   //  + (now.getTimezoneOffset() * 60 * 1000)
+    const mySecondsSinceEpoch = Math.round(myMilllisecondsSinceEpoch / 1000)
+
+    var secs = mySecondsSinceEpoch - tm;
+    if (secs <= 0)
+        return '';
+
+    var hours = parseInt(secs / 3600);
+    secs -= hours * 3600;
+    var mins = parseInt(secs / 60);
+    secs -= mins * 60;
+    return pad(hours,2) + ':' + pad(mins,2) + ':' + pad(secs,2);
 }
 
 
@@ -125,16 +159,14 @@ function uploadFiles(evt)
     xhr.timeout = 30000;
 
     // completion and errors are handled by websocket with upload_filename in it
-    //
-    // the spiffs_list is broadcast automatically by the HTTP
+    // the file list is broadcast automatically by the HTTP
     // server upon the completion (or failure) of any file uploads.
     // so we don't use these js functions:
-    //
-    // xhr.onload = function () {};
-    // xhr.onerror = function () {};
-        // we sometimes get http errors even though everything worked
-    // xhr.ontimeout = function () { alert("timeout uploading"); };
-        // we sometimes get timeout errors even though the server succeeded
+    //      xhr.onload = function () {};
+    //      xhr.onerror = function () {};
+    //          we sometimes get http errors even though everything worked
+    //      xhr.ontimeout = function () { alert("timeout uploading"); };
+    //          we sometimes get timeout errors even though the server succeeded
 
     if (id == 'ota_files' || files.length > 2 || total_bytes > 10000)
     {
@@ -146,11 +178,11 @@ function uploadFiles(evt)
     }
 
     xhr.open("POST", "/" + id  + args, true);
-    // xhr.setRequestHeader('X-Requested-With','XMLHttpRequest');
+
+    // add the uuid header for pass through by the myIOTServer.pm
+
     if (device_uuid)
         xhr.setRequestHeader('x-myiot-deviceuuid',device_uuid);
-
-    in_upload = true;
     xhr.send(formData);
 }
 
@@ -174,11 +206,6 @@ function sendCommand(command,params)
 
 function checkAlive()
 {
-    // if (in_upload ||
-    // I used to not do this if in_upload due to perceived timing issues in uploads
-    // however, the myIOTServer needs the pings for it's own alive detection
-    // and it seems to work, so I am re-instituting pings durin uploads
-
     if (!web_socket || web_socket.opening || web_socket.closing)
         return;
     if (debug_alive)
@@ -202,7 +229,6 @@ function checkAlive()
 
 function keepAlive()
 {
-    // if (in_upload ||
     if (!web_socket || !web_socket.alive || web_socket.opening || web_socket.closing)
         return;
     if (debug_alive)
@@ -214,10 +240,15 @@ function keepAlive()
 
 
 
-var old_socket;
+// var old_socket;
+    // we keep the old one around so it is not garbage collected during close cycle
 
 function openWebSocket()
 {
+    // disable all controls=
+
+    $('.myiot').attr("disabled",1);
+
     // is_server connects to HTTPS Server port using
     // WSS at the url /ws
 
@@ -237,7 +268,7 @@ function openWebSocket()
     console.log("openWebSocket(" + ws_connect_count  + ") to " + url);
     $('#ws_status1').html("WS(" + ws_connect_count + ") O " + url);
 
-    old_socket = web_socket;
+    // old_socket = web_socket;
     ws_open_count++;
 
     web_socket = new WebSocket(url);
@@ -259,9 +290,14 @@ function openWebSocket()
         }
         else
         {
+            // we specifically do the value_list AFTER the device_info
+            // so that upon value_list we can change-away-from-the-sdcard-tab
+            // if there is no SD card
+
             sendCommand("device_info");
-            sendCommand("spiffs_list");
             sendCommand("value_list");
+            sendCommand("spiffs_list");
+            sendCommand("sdcard_list");
         }
         this.alive = 1;
         setTimeout(keepAlive,keep_alive_interval);
@@ -292,6 +328,10 @@ function openWebSocket()
 
 
 
+//---------------------------------------------
+// WEB SOCKET COMMAND HANDLER
+//---------------------------------------------
+
 function handleWS(ws_event)
 {
     var ws_msg = ws_event.data;
@@ -309,13 +349,19 @@ function handleWS(ws_event)
 
     if (obj.set)
     {
+        // from the device to 'set' a value
         // obj.set is the 'id' to set.
 
         $('.' + obj.set).each(function () {
             var ele = $(this);
+
+            // set new value into 'time since' data-value
+
             var data_value = ele.attr('data-value');
             if (typeof(data_value) != 'undefined')
                 ele.attr({'data-value' : obj.value});
+
+            // set the value based on the value type
 
             if (ele.is("span"))
                 ele.html(obj.value)
@@ -325,12 +371,18 @@ function handleWS(ws_event)
                 ele.val(obj.value);
         });
 
+        // The DEVICE_BOOTING value is ONLY sent upon rebooting
+        // so we disable all controls here (and show the word)
+
         if (obj.set == 'DEVICE_BOOTING')
         {
             $('.myiot').attr("disabled",1);
             $('#device_status').html('rebooting');
         }
     }
+
+    // device_name is part of device_info, and also used to note the UUID
+    // and whether the SD card button should be shown
 
     if (obj.device_name)
     {
@@ -340,11 +392,28 @@ function handleWS(ws_event)
         if (!is_server)
             document.title = device_name;
         $('#DEVICE_NAME').html(device_name);
+        device_has_sd = parseInt(obj.has_sd);
+            // cache the value of the has_sd for use in
+            // value_list fillTables() method.
     }
+
+    // if there are values, then we fill the tables
+    // this is essentially the 'new' context trigger
+
     if (obj.values)
         fillTables(obj);
-    if (obj.files)
-        updateSPIFFSList(obj);
+
+    // update SPIFFS or SDCARD file lists
+
+    if (obj.spiffs_list)
+        updateFileList(obj.spiffs_list);
+    if (obj.sdcard_list)
+        updateFileList(obj.sdcard_list);
+
+    // upload progress dialog
+    // only does antying if this user happens to have
+    // opened the dialog ...
+
     if (obj.upload_filename)
     {
         var pct = obj.upload_progress;
@@ -360,7 +429,10 @@ function handleWS(ws_event)
             alert("There was a server error while uploading");
     }
 
+    //--------------------------
     // server specific
+    //--------------------------
+    // disable or enable controls if ws_open is 0 or 1
 
     if (typeof obj.ws_open != 'undefined')
     {
@@ -368,8 +440,13 @@ function handleWS(ws_event)
         cur = cur.startsWith('rebooting') ? 'rebooting ' : '';
         cur += obj.ws_open ? 'ws_open' : 'ws_closed';
         $('#device_status').html(cur);
-        $('.myiot').attr("disabled",!obj.ws_open);
+        if (obj.ws_open)
+            $('.myiot').removeAttr("disabled");
+        else
+            $('.myiot').attr("disabled",1);
     }
+
+    // build the device list, pick the 0th one by default
 
     if (obj.device_list)
     {
@@ -389,6 +466,9 @@ function handleWS(ws_event)
             var option = $("<option>").attr('value',device.uuid).text(device.name);
             the_list.append(option);
         }
+
+        // activate the default device ...
+
         if (device_uuid)
         {
             the_list.val(device_uuid);
@@ -399,24 +479,18 @@ function handleWS(ws_event)
 
 
 
-function onChangeDevice(evt)
-{
-    var obj = evt.target;
-    var value = obj.value;
-    // alert("onDeviceChange(" + value + "");
-    sendCommand("set_context",{uuid:value});
-}
-
 
 //---------------------------------------
-// table fillers (UI Builder)
+// file table filler
 //---------------------------------------
 
-function updateSPIFFSList(obj)
+function updateFileList(obj)
 {
-    $('table#filemanager tbody').empty();
-    $('#spiffs_used').html(fileKB(obj.used) + " used");
-    $('#spiffs_size').html("of " + fileKB(obj.total) + " total");
+    var prefix = obj.sdcard ? "sdcard" : "spiffs";
+
+    $('table#' + prefix + '_list tbody').empty();
+    $('#' + prefix + '_used').html(fileKB(obj.used) + " used");
+    $('#' + prefix + '_size').html("of " + fileKB(obj.total) + " total");
 
     // note that file links, which open in another tab,
     // are NOT disabled during reboot/ws_close events,
@@ -428,15 +502,19 @@ function updateSPIFFSList(obj)
         var file = obj.files[i];
         var link = '<a class="myiot" ' +
             'target=”_blank” ' +
-            'href="/' + file.name + '">' + file.name + '</a>';
+            'href="/' + prefix + '/' + file.name;
+        if (is_server)
+            link += '?uuid=' + device_uuid;
+        link += '">' + file.name;
+        link += '</a>';
         var button = "<button " +
             "class='btn btn-secondary myiot' " +
             // "class='my_trash_can' " +
-            "onclick='confirmDelete(\"" + file.name + "\")'>" +
+            "onclick='confirmDelete(\"/" + prefix + "/" +  file.name + "\")'>" +
             "delete" +
             // "<span class='my_trash_can'>delete</span>" +
             "</button>";
-        $('table#filemanager tbody').append(
+        $('table#' + prefix + '_list tbody').append(
             $('<tr />').append(
               $('<td />').append(link),
               $('<td />').text(file.size),
@@ -446,6 +524,10 @@ function updateSPIFFSList(obj)
 
 
 
+
+//---------------------------------------
+// UI Builder
+//---------------------------------------
 
 function addSelect(item)
 {
@@ -526,34 +608,6 @@ function addSwitch(item)
 }
 
 
-
-function pad(num, size) {
-    var num = num.toString();
-    while (num.length < size) num = "0" + num;
-    return num;
-}
-
-function formatSince(tm)
-{
-    if (tm == 0)
-        return '';
-    const now = new Date()
-    const myMilllisecondsSinceEpoch = now.getTime();   //  + (now.getTimezoneOffset() * 60 * 1000)
-    const mySecondsSinceEpoch = Math.round(myMilllisecondsSinceEpoch / 1000)
-
-    var secs = mySecondsSinceEpoch - tm;
-    if (secs <= 0)
-        return '';
-
-    var hours = parseInt(secs / 3600);
-    secs -= hours * 3600;
-    var mins = parseInt(secs / 60);
-    secs -= mins * 60;
-    return pad(hours,2) + ':' + pad(mins,2) + ':' + pad(secs,2);
-}
-
-
-
 function addOutput(item)
     // outputs are only colleced by class==item.id
 {
@@ -561,7 +615,6 @@ function addOutput(item)
     if (item.style & VALUE_STYLE_TIME_SINCE)
     {
         // the value is the time as an integer
-
         obj.addClass('time_since');
         obj.attr({'data-value' : item.value});
         obj.html(formatSince(item.value));
@@ -635,6 +688,17 @@ function fillTables(obj)
     fillTable(obj.values,obj.config_items,$('table#config_table tbody'));
     fillTable(obj.values,obj.dash_items,$('table#dashboard_table tbody'));
 
+    // At this point a new device has been loaded ...
+    // We do the general enable/disable stuff here.
+    //
+    // Start by enabling all controls.
+    // This is specifically for the OTA & UPLOAD buttons
+    // even though it wastes time on all the other values
+
+    $('.myiot').removeAttr("disabled");
+
+    // then if we notice the device is booting, disable the controls
+
     if (obj.values['DEVICE_BOOTING'] &&
         obj.values['DEVICE_BOOTING'].value)
     {
@@ -642,10 +706,20 @@ function fillTables(obj)
         $('#device_status').html('rebooting');
     }
 
-    // but what about the buttons on the spiffs_list?
+    // hide or show the sdcard_button based on whether or not
+    // the device_has_sd was in the most recent 'device_info'
+    // and furthermore, if it's not active, and they were on
+    // that tab, activate the dashboard tab.
 
-    // else
-    //     $('.myiot').attr("disabled",0);
+    if (device_has_sd)
+        $('#sdcard_button').addClass('shown');
+    else
+    {
+        $('#sdcard_button').removeClass('shown');
+        if (cur_button == 'sdcard_button')
+            $('#dashboard_button').click();
+    }
+
 }
 
 
@@ -658,6 +732,7 @@ function onUploadClick(id)
 {
     $('#' + id).click();
 }
+
 
 function onButton(evt)
 {
@@ -672,6 +747,7 @@ function onButton(evt)
     sendCommand("invoke",{"id":id});
 }
 
+
 function onSwitch(evt)
 {
     var cb = evt.target;
@@ -679,7 +755,6 @@ function onSwitch(evt)
     var value = cb.checked ? "1" : "0";
     sendCommand("set",{ "id":name, "value":value });
 }
-
 
 
 function onValueChange(evt)
@@ -744,15 +819,25 @@ function onValueChange(evt)
 }
 
 
+function onChangeDevice(evt)
+    // change the device on the is_server version
+{
+    var obj = evt.target;
+    var value = obj.value;
+    // alert("onDeviceChange(" + value + "");
+    sendCommand("set_context",{uuid:value});
+}
+
+
 //------------------------------------------------
-// click and interval handlers
+// confirm and interval handler
 //------------------------------------------------
 
 function confirmDelete(fn)
 {
     if (window.confirm("Confirm deletion of \n" + fn))
     {
-        web_socket.send(JSON.stringify({cmd:"spiffs_delete", filename:fn}));
+        web_socket.send(JSON.stringify({cmd:"delete_file", filename:fn}));
     }
 }
 
@@ -773,6 +858,8 @@ function updateTimers()
             ele.val(str);
     });
 }
+
+
 
 //------------------------------------------------
 // startMyIOT()
@@ -804,9 +891,14 @@ function startMyIOT()
     openWebSocket();
 
     setInterval(updateTimers,200);
+        // timer for "time_since" field updating
+
+    $('button[data-bs-toggle="tab"]').on('shown.bs.tab', onTab);
+        // set handler for tab buttons
 
     // initChart();
 }
 
 
 window.onload = startMyIOT;
+    // and away we go

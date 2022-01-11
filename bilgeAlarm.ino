@@ -6,9 +6,6 @@
 
 #ifdef WITH_SD
     #define INIT_SD_EARLY
-    #ifdef INIT_SD_EARLY
-        #include <SD.h>
-    #endif
 #endif
 
 
@@ -22,26 +19,31 @@ void setup()
     Serial.begin(115200);
     delay(1000);
 
-    bilge_alarm = new bilgeAlarm();
-    bilge_alarm->init();
+    bilgeAlarm::setDeviceType(BILGE_ALARM);
+    bilgeAlarm::setDeviceVersion(BILGE_ALARM_VERSION);
 
+    // init the SD Card in early derived device
+    // due to it's wonky SPI behavior, and so that
+    // logfile can begin immediately.
+
+    #ifdef WITH_SD
+    #ifdef INIT_SD_EARLY
+        bool sd_ok = bilgeAlarm::initSDCard();
+    #endif
+    #endif
+
+    LOGU("");
+    LOGU("");
     LOGU("bilgeAlarm.ino setup() started on core(%d)",xPortGetCoreID());
 
     #ifdef WITH_SD
     #ifdef INIT_SD_EARLY
-        delay(200);
-        bool sd_ok = SD.begin(5);     // 5
         LOGD("sd_ok=%d",sd_ok);
     #endif
     #endif
 
+    bilge_alarm = new bilgeAlarm();
     bilge_alarm->setup();
-
-    LOGI("%s(%s) version=%s IOTVersion=%s",
-         bilge_alarm->getDeviceType(),
-         bilge_alarm->getName().c_str(),
-         bilge_alarm->getVersion(),
-         IOT_DEVICE_VERSION);
 
     LOGU("bilgeAlarm.ino setup() finished",0);
 }
