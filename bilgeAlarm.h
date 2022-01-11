@@ -1,29 +1,6 @@
 //-----------------------------------
 // bilgeAlarm.h
 //-----------------------------------
-// PRH - could easily add something like a "notes" or "since last check"
-// that would keep track of the number of runs, maximum duration,
-// any alarms (i.e. including the self clearing count alarms) since
-// it was last cleared manually.
-
-// TODO:
-//
-//    - ui for time fields with VALUE_STYLE_TIME_SINCE potential style (on Interval)
-//    - device_specific UI for ID_DUR_LAST_RUN to count in the UI if it's zero (and maybe a style to add "secs" to the READONLY field)
-//    - WS2812 LEDs
-//    - THE WHOLE BUTTON/LCD UI
-//    - Revisit device power monitoring (perhaps a runtime param ?!?!)
-//    - SD Card Basics // fileServer compatible (through myIOTServer?)
-//    - LOGU/LOGI to SD card logfiles (by month?)
-//    - bilgeAlarm graph from SD logfile(s)
-//    - UI layout
-//    - device specific "widget" (guages, etc)
-//    - Server to serve page with multiple device widgets (that declare them)
-//    - circuit board (connectors particularly) & 3D printed housing
-//    - mount and test in-situ
-//    - lightSwitch device (for testing from apartment)
-//    - myIOTDevice UI with at least reboot
-//    - rPi remote management - i.e. logrotate, webMin, etc
 
 #pragma once
 
