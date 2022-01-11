@@ -3,13 +3,12 @@
 //-----------------------------------
 #include "bilgeAlarm.h"
 #include <myIOTLog.h>
-#include <Wire.h>
-#include <LiquidCrystal_I2C.h>
+#include <iotLCD_UI.h>
+
 
 #define DEBUG_STATES  1
 #define DEBUG_ALARM   0
 
-#define LCD_LINE_LEN   16
 
 #define BUTTON_CHECK_TIME  30
 #define UI_UPDATE_TIME     30
@@ -61,7 +60,7 @@ static valueIdType dash_items[] = {
     ID_CLEAR_ERROR,
     ID_CLEAR_HISTORY,
     ID_DISABLED,
-#if TEST_VERSION
+#if HAS_LCD_LINE_VALUES
     ID_LCD_LINE1,
     ID_LCD_LINE2,
 #endif
@@ -164,14 +163,17 @@ const valDescriptor bilgeAlarm::m_bilge_values[] =
 
     { ID_FORCE_RELAY,      VALUE_TYPE_BOOL,     VALUE_STORE_TOPIC,    VALUE_STYLE_NONE,       (void *) &_FORCE_RELAY,    (void *) onForceRelay },
 
+#if HAS_LCD_LINE_VALUES
+    { ID_LCD_LINE1,        VALUE_TYPE_STRING,   VALUE_STORE_TOPIC,    VALUE_STYLE_LONG,       (void *) &_lcd_line1,      (void *) onLcdLine },
+    { ID_LCD_LINE2,        VALUE_TYPE_STRING,   VALUE_STORE_TOPIC,    VALUE_STYLE_LONG,       (void *) &_lcd_line2,      (void *) onLcdLine },
+#endif
 #if TEST_VERSION
     { ID_ONBOARD_LED,      VALUE_TYPE_BOOL,     VALUE_STORE_TOPIC,    VALUE_STYLE_NONE,       (void *) &_ONBOARD_LED,    (void *) onLed, },
     { ID_OTHER_LED,        VALUE_TYPE_BOOL,     VALUE_STORE_TOPIC,    VALUE_STYLE_NONE,       (void *) &_OTHER_LED,      (void *) onLed, },
     { ID_DEMO_MODE,        VALUE_TYPE_BOOL,     VALUE_STORE_PREF,     VALUE_STYLE_NONE,       (void *) &_DEMO_MODE,      },
-    { ID_LCD_LINE1,        VALUE_TYPE_STRING,   VALUE_STORE_TOPIC,    VALUE_STYLE_LONG,       (void *) &_lcd_line1,      (void *) onLcdLine },
-    { ID_LCD_LINE2,        VALUE_TYPE_STRING,   VALUE_STORE_TOPIC,    VALUE_STYLE_LONG,       (void *) &_lcd_line2,      (void *) onLcdLine },
 #endif
 };
+
 
 #define NUM_BILGE_VALUES (sizeof(m_bilge_values)/sizeof(valDescriptor))
 
@@ -201,12 +203,14 @@ int  bilgeAlarm::_relay_debounce;
 
 bool bilgeAlarm::_FORCE_RELAY;
 
+#if HAS_LCD_LINE_VALUES
+    String bilgeAlarm::_lcd_line1;
+    String bilgeAlarm::_lcd_line2;
+#endif
 #if TEST_VERSION
     bool bilgeAlarm::_ONBOARD_LED;
     bool bilgeAlarm::_OTHER_LED;
     bool bilgeAlarm::_DEMO_MODE;
-    String bilgeAlarm::_lcd_line1;
-    String bilgeAlarm::_lcd_line2;
 #endif
 
 // working vars
@@ -230,8 +234,8 @@ time_t bilgeAlarm::m_clear_time;
 // globals
 
 bilgeAlarm *bilge_alarm = NULL;
+iotLCD_UI *my_ui = NULL;
 
-LiquidCrystal_I2C lcd(0x27,LCD_LINE_LEN,2);   // 20,4);  // set the LCD address to 0x27 for a 16 chars and 2 line display
 
 
 //-----------------------------------------------
@@ -347,21 +351,17 @@ void bilgeAlarm::setup()
     digitalWrite(PIN_OTHER_LED,0);
 #endif
 
-    pinMode(PIN_BUTTON1,  INPUT_PULLDOWN);
-    pinMode(PIN_BUTTON2,  INPUT_PULLDOWN);
-    pinMode(PIN_BUTTON3,  INPUT_PULLDOWN);
-    pinMode(PIN_BUTTON4,  INPUT_PULLDOWN);
     pinMode(PIN_PUMP1_ON, INPUT_PULLDOWN);
     pinMode(PIN_PUMP2_ON, INPUT_PULLDOWN);
     // pinMode(PIN_5V_IN,    INPUT);
     // pinMode(PIN_12V_IN,   INPUT);
 
-    lcd.init();                      // initialize the lcd
-    lcd.backlight();
-    lcd.setCursor(0,0);
-    lcd.print(0,"bilgeAlarm");
-    lcd.setCursor(0,1);
-    lcd.print(getVersion());
+    my_ui = new iotLCD_UI(
+        PIN_BUTTON0,
+        PIN_BUTTON1,
+        PIN_BUTTON2,
+        PIN_BUTTON3);
+    my_ui->setup();
 
     myIOTDevice::setup();
 
@@ -376,71 +376,9 @@ void bilgeAlarm::setup()
     proc_leave();
     LOGD("bilgeAlarm::setup(%s) completed",getVersion());
 
-    lcd.setCursor(0,1);
-    lcd.print("running");
+
 }
 
-
-//---------------------------------
-// lcdPrint
-//---------------------------------
-// For some reason the "lcd." methods must be called from
-// the same core it lcd.init() was called on, which is
-// ESP32_CORE_ARDUINO=1 as called from Arduino setup() method.
-// I believe the ESP32 Wire I2C library is not multi-core safe.
-// It does not appear to be a synchronization issue, as I only
-// use I2C for the lcd and only rarely call it.  It seems like
-// something more fundamental (i.e. an interrupt or timer) used
-// by the Wire library is not multi-core safe.
-//
-// So, either every task which *might* write to the LCD, including
-// the WS, Serial, MQTT, and even the power Task, would need to
-// run on ESP32_CORE_ARDUINO=1, which pretty much breaks my notions
-// of task architecture, OR we have to enque them in static memory
-// and call them from loop(), which for all of it's messiness, seems
-// the better way to go.
-//
-// I have spent several hours on this.
-// I'm going with LCD_PRINT_DEFERRED
-
-#define LCD_PRINT_DEFERRED 1
-    // this is somewhat equivilant to having a task that init's
-    // the lcd (Wire.begin()) and writes to it the same core
-    // and let's clients set static variables to be written
-
-
-#if LCD_PRINT_DEFERRED
-    static char lcd_buf[2][LCD_LINE_LEN+1];
-    static char lcd_save[2][LCD_LINE_LEN+1];
-
-    void bilgeAlarm::lcdPrint(int line, const char *msg)
-    {
-        LOGD("lcdPrint(%d,%s)",line,msg);
-        char *line_buf = lcd_buf[line];
-        int len = strlen(msg);
-        if (len > LCD_LINE_LEN) len = LCD_LINE_LEN;
-        strncpy(line_buf,msg,len);
-        for (int i=len; i<LCD_LINE_LEN; i++)
-            line_buf[i] = ' ';
-        line_buf[LCD_LINE_LEN] = 0;
-    }
-#else   // LCD_PRINT_DEFERRED
-
-    void bilgeAlarm::lcdPrint(int line, const char *msg)
-    {
-        LOGD("lcdPrint(%d,%s)",line,msg);
-        char line_buf[LCD_LINE_LEN+1];
-        int len = strlen(msg);
-        if (len > LCD_LINE_LEN) len = LCD_LINE_LEN;
-        strncpy(line_buf,msg,len);
-        for (int i=len; i<LCD_LINE_LEN; i++)
-            line_buf[i] = ' ';
-        line_buf[LCD_LINE_LEN] = 0;
-        lcd.setCursor(0,line);
-        lcd.print(line_buf);
-    }
-
-#endif
 
 
 //------------------------------------
@@ -450,7 +388,6 @@ void bilgeAlarm::setup()
 void bilgeAlarm::suppressError()
 {
     LOGU("suppressError()");
-    lcdPrint(1,"supress error");
     setAlarmState(_alarm_state | ALARM_STATE_SUPPRESSED);
 }
 
@@ -458,7 +395,6 @@ void bilgeAlarm::suppressError()
 void bilgeAlarm::clearError()
 {
     LOGU("clearError()");
-    lcdPrint(1,"clear error");
     setAlarmState(0);
     setState(_state & ~(
         STATE_EMERGENCY |
@@ -472,7 +408,6 @@ void bilgeAlarm::clearError()
 void bilgeAlarm::clearHistory()
 {
     LOGU("clearHistory()");
-    lcdPrint(1,"clear history");
     clearError();
     memset(run_history,0,MAX_RUN_HISTORY * sizeof(runHistory_t));
     run_head = 0;
@@ -610,6 +545,13 @@ void bilgeAlarm::alarmTask(void *param)
 // buttons and other hardware
 //---------------------------------------------------
 
+#if HAS_LCD_LINE_VALUES
+    void bilgeAlarm::onLcdLine(const myIOTValue *value, const char *val)
+    {
+        int line = value->getId() == ID_LCD_LINE1 ? 0 : 1;
+        LOGD("onLCDLine(%d,%s)",line,val);
+    }
+#endif
 #if TEST_VERSION
     void bilgeAlarm::onLed(const myIOTValue *value, bool val)
     {
@@ -622,13 +564,6 @@ void bilgeAlarm::alarmTask(void *param)
         {
             digitalWrite(PIN_OTHER_LED,val);
         }
-    }
-
-    void bilgeAlarm::onLcdLine(const myIOTValue *value, const char *val)
-    {
-        int line = value->getId() == ID_LCD_LINE1 ? 0 : 1;
-        LOGD("onLCDLine(%d,%s)",line,val);
-        lcdPrint(line,val);
     }
 #endif
 
@@ -647,20 +582,6 @@ void bilgeAlarm::onDisabled(const myIOTValue *value, bool val)
     }
 }
 
-
-
-void bilgeAlarm::handleButtons()
-{
-    bool button1 = digitalRead(PIN_BUTTON1);
-    bool button2 = digitalRead(PIN_BUTTON2);
-    bool button3 = digitalRead(PIN_BUTTON3);
-    bool button4 = digitalRead(PIN_BUTTON4);
-    if (_alarm_state && !(_alarm_state & ALARM_STATE_SUPPRESSED))
-    {
-        if (button1 || button2 || button3 || button4)
-            _alarm_state |= ALARM_STATE_SUPPRESSED;
-    }
-}
 
 
 
@@ -1050,43 +971,12 @@ void bilgeAlarm::loop()
     myIOTDevice::loop();
 
     uint32_t now = millis();
-    static uint32_t check_buttons = 0;
     static uint32_t check_sensors = 0;
-    if (now > check_buttons + BUTTON_CHECK_TIME)
-    {
-        check_buttons = now;
-        handleButtons();
-    }
     if (now > check_sensors + _sense_millis)
     {
         check_sensors = now;
         handleSensors();
     }
 
-    #if 0
-        // was used to prove the LCD is working
-        // as I discovered liquidCrystal_i2C library
-        // dependency on ESP32 core it is init'd on.
-        static uint32_t test_lcd = 0;
-        static int lcd_counter = 0;
-        if (now > test_lcd + 5000)
-        {
-            test_lcd = now;
-            String test = "lcd_test ";
-            test += lcd_counter++;
-            lcdPrint(1,test.c_str());
-        }
-    #endif
-
-    #if LCD_PRINT_DEFERRED
-        for (int line=0; line<2; line++)
-        {
-            if (strcmp(lcd_save[line],lcd_buf[line]))
-            {
-                lcd.setCursor(0,line);
-                lcd.print(lcd_buf[line]);
-                strcpy(lcd_save[line],lcd_buf[line]);
-            }
-        }
-    #endif
+    my_ui->loop();
 }

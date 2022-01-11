@@ -11,7 +11,9 @@
 
 
 #define TEST_VERSION         0
-    // includes LEDs, DEMO_MODE, and LCD_LINES
+    // includes LEDs, DEMO_MODE
+#define HAS_LCD_LINE_VALUES  1
+
 
 //------------------------
 // pins
@@ -25,10 +27,11 @@
 // PIN_SCLK  = 18
 // PIN_MISO  = 19
 
-#define PIN_BUTTON1         13
-#define PIN_BUTTON2         14
-#define PIN_BUTTON3         33
-#define PIN_BUTTON4         32
+#define PIN_BUTTON0         13
+#define PIN_BUTTON1         14
+#define PIN_BUTTON2         33
+#define PIN_BUTTON3         32
+
 #define PIN_PUMP1_ON        36
 #define PIN_PUMP2_ON        39
 #define PIN_12V_IN          34
@@ -92,13 +95,16 @@
 #define ID_RUN_EMERGENCY    "RUN_EMERGENCY"         // off,secs - how long to turn on the relay as long as the emergency switch turns on
     // This will run the main pump if the emergency pump turns on, and continue running it for N more seconds than the emergency pump
 
+#if HAS_LCD_LINE_VALUES
+    #define ID_LCD_LINE1        "LCD_LINE1"
+    #define ID_LCD_LINE2        "LCD_LINE2"
+#endif
 #if TEST_VERSION
     #define ID_ONBOARD_LED      "ONBOARD_LED"
     #define ID_OTHER_LED        "OTHER_LED"
     #define ID_DEMO_MODE        "DEMO_MODE"
-    #define ID_LCD_LINE1        "LCD_LINE1"
-    #define ID_LCD_LINE2        "LCD_LINE2"
 #endif
+
 
 
 //------------------------
@@ -178,13 +184,16 @@ private:
 
     static bool _FORCE_RELAY;
 
+    #if HAS_LCD_LINE_VALUES
+        static String _lcd_line1;
+        static String _lcd_line2;
+    #endif
     #if TEST_VERSION
         static bool _ONBOARD_LED;
         static bool _OTHER_LED;
         static bool _DEMO_MODE;
-        static String _lcd_line1;
-        static String _lcd_line2;
     #endif
+
 
     // working vars
 
@@ -207,7 +216,6 @@ private:
     static void alarmTask(void *param);
 
     void handleSensors();
-    void handleButtons();
     void startRun();
     void endRun();
     int countRuns(int hours);
@@ -216,6 +224,8 @@ private:
     static void onDisabled(const myIOTValue *desc, bool val);
     #if TEST_VERSION
         static void onLed(const myIOTValue *desc, bool val);
+    #endif
+    #if HAS_LCD_LINE_VALUES
         static void onLcdLine(const myIOTValue *desc, const char *val);
     #endif
 
