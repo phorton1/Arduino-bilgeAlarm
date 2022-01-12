@@ -240,12 +240,9 @@ function keepAlive()
 
 
 
-// var old_socket;
-    // we keep the old one around so it is not garbage collected during close cycle
-
 function openWebSocket()
 {
-    // disable all controls=
+    // disable all controls
 
     $('.myiot').attr("disabled",1);
 
@@ -268,7 +265,6 @@ function openWebSocket()
     console.log("openWebSocket(" + ws_connect_count  + ") to " + url);
     $('#ws_status1').html("WS(" + ws_connect_count + ") O " + url);
 
-    // old_socket = web_socket;
     ws_open_count++;
 
     web_socket = new WebSocket(url);

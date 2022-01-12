@@ -12,7 +12,7 @@
 
 #define TEST_VERSION         0
     // includes LEDs, DEMO_MODE
-#define HAS_LCD_LINE_VALUES  1
+#define HAS_LCD_LINE_VALUES  0
 
 
 //------------------------
@@ -56,6 +56,7 @@
 #define ID_SINCE_LAST_RUN   "SINCE_LAST_RUN"
 #define ID_NUM_LAST_HOUR    "NUM_LAST_HOUR"
 #define ID_NUM_LAST_DAY     "NUM_LAST_DAY"
+#define ID_NUM_LAST_WEEK    "NUM_LAST_WEEK"
 
 #define ID_FORCE_RELAY      "FORCE_RELAY"           // the user command (switch) to force the relay on or off
 #define ID_SUPPRESS         "SUPPRESS_ALARM"        // the user command (button) to suppress the alarm sound
@@ -83,7 +84,7 @@
 #define ID_EXTRA_RUN_DELAY  "EXTRA_RUN_DELAY"       // millis, if after_end, how long after pump goes off before we turn on relay (long debounce time)
     // The "duration" does not include any time while the relay is on.
 
-#define ID_SENSE_MILLIS     "SENSE_MILLIS"          // millis  5+ - how often to check the pump input pins, 5 minimum 30 default
+#define ID_SENSE_MILLIS     "SENSE_MILLIS"          // millis - how often to check the pump input pins, 5 minimum 30 default
 #define ID_PUMP_DEBOUNCE    "PUMP_DEBOUNCE"         // millis - how long after the pump switch changes before we read it again
 #define ID_RELAY_DEBOUNCE   "RELAY_DEBOUNCE"        // millis - how long after the relay goes off before we read the pump switch again
     // We read the pump sensors every SENSOR_MILLIS milliseconds.
@@ -154,6 +155,13 @@ public:
     virtual void setup() override;
     virtual void loop() override;
 
+    static uint32_t getState()       { return _state; }
+    static uint32_t getAlarmState()  { return _alarm_state; }
+
+    static void clearError();
+    static void suppressAlarm();
+    static void clearHistory();
+
 private:
 
     static const valDescriptor m_bilge_values[];
@@ -167,6 +175,7 @@ private:
     static int      _dur_last_run;
     static int      _num_last_hour;
     static int      _num_last_day;
+    static int      _num_last_week;
 
     static bool _disabled;
     static int  _backlight_secs;
@@ -204,13 +213,11 @@ private:
     static bool     m_suppress_next_after;
 
     static time_t   m_start_duration;
-    static time_t   m_clear_time;
+    static time_t   m_clear_day_time;
+    static time_t   m_clear_hour_time;
 
     // methods
 
-    static void clearError();
-    static void clearHistory();
-    static void suppressError();
     static void setState(uint32_t state);
     static void setAlarmState(uint32_t alarm_state);
     static void alarmTask(void *param);
@@ -218,10 +225,12 @@ private:
     void handleSensors();
     void startRun();
     void endRun();
-    int countRuns(int hours);
+    int countRuns(int type);
 
     static void onForceRelay(const myIOTValue *desc, bool val);
     static void onDisabled(const myIOTValue *desc, bool val);
+    virtual void onValueChanged(const myIOTValue *value) override;
+
     #if TEST_VERSION
         static void onLed(const myIOTValue *desc, bool val);
     #endif
