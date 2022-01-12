@@ -20,10 +20,11 @@
 
 
 #define MAX_RUN_HISTORY    256      // 256 * 8 = 2K
+    // set to smaller number (i.e 15) for testing circular buffer
+    //
     // circular buffer of run history, where each history element
     // is 8 bytes (two 32 bit numbers), the first being the time
     // of the run, and the second being the duration of the run in seconds.
-    //
     // The buffer MUST be large enough to handle all the runs in a day,
     // or certainly at least more than the error configuration values
 
@@ -63,6 +64,7 @@ static valueIdType dash_items[] = {
     ID_NUM_LAST_HOUR,
     ID_NUM_LAST_DAY,
     ID_NUM_LAST_WEEK,
+    ID_HISTORY_LINK,
     ID_SINCE_LAST_RUN,
     ID_TIME_LAST_RUN,
     ID_DUR_LAST_RUN,
@@ -183,6 +185,11 @@ const valDescriptor bilgeAlarm::m_bilge_values[] =
     { ID_OTHER_LED,        VALUE_TYPE_BOOL,     VALUE_STORE_TOPIC,    VALUE_STYLE_NONE,       (void *) &_OTHER_LED,      (void *) onLed, },
     { ID_DEMO_MODE,        VALUE_TYPE_BOOL,     VALUE_STORE_PREF,     VALUE_STYLE_NONE,       (void *) &_DEMO_MODE,      },
 #endif
+
+    // following places a custom link on the dashboard page
+
+    { ID_HISTORY_LINK,   VALUE_TYPE_STRING,     VALUE_STORE_PUB,       VALUE_STYLE_READONLY,   (void *) &_history_link,     },
+
 };
 
 
@@ -198,6 +205,8 @@ int      bilgeAlarm::_dur_last_run;
 int      bilgeAlarm::_num_last_hour;
 int      bilgeAlarm::_num_last_day;
 int      bilgeAlarm::_num_last_week;
+String   bilgeAlarm::_history_link;
+
 
 bool bilgeAlarm::_disabled;
 int  bilgeAlarm::_backlight_secs;
@@ -244,17 +253,6 @@ time_t bilgeAlarm::m_clear_hour_time;
     // any runs before this time.
 
 
-// globals
-
-bilgeAlarm *bilge_alarm = NULL;
-// iotLCD_UI *my_ui = NULL;
-
-
-
-//-----------------------------------------------
-// in-memory list of pump_runs (database)
-//-----------------------------------------------
-
 typedef struct {
     time_t  tm;
     int     dur;
@@ -264,128 +262,10 @@ typedef struct {
 static runHistory_t run_history[MAX_RUN_HISTORY];
 static int run_head = 0;
 
-void bilgeAlarm::startRun()
-{
-    time_t now = time(NULL);
-    m_start_duration = now;
-    LOGU("PUMP ON(%d)",run_head);
-    runHistory_t *ptr = &run_history[run_head];
-    ptr->tm = now;
-    ptr->dur = 0;
-    setTime(ID_TIME_LAST_RUN,now);
-    setInt(ID_SINCE_LAST_RUN,(int32_t)now);
-    setInt(ID_DUR_LAST_RUN,0);
-}
 
-void bilgeAlarm::endRun()
-{
-    time_t now = time(NULL);
-    int duration = now - m_start_duration;
-    if (duration == 0) duration = 1;
-    LOGU("PUMP OFF(%d) %d secs",run_head,duration);
-    runHistory_t *ptr = &run_history[run_head++];
-    if (run_head >= MAX_RUN_HISTORY)
-        run_head = 0;
-    setInt(ID_DUR_LAST_RUN,duration);
-    m_start_duration = 0;
-}
+bilgeAlarm *bilge_alarm = NULL;
+// iotLCD_UI *my_ui = NULL;
 
-
-int bilgeAlarm::countRuns(int type)
-    // note that this does NOT count the current run which is happening
-    // it only counts fully commited runs, so per_day and per_hour alarms
-    // happen when the pump turns OFF.   Due to the alarm clearing strategy,
-    // the and week counts shown after a clear will more or less be zeroed,
-    // though the history still contains all the runs.
-{
-    // LOGD("countRuns(%d) run_head=%d",hours,run_head);
-    // can't really debug in here since it is called every second
-
-    uint32_t cutoff;
-    time_t now = time(NULL);
-
-    if (type == COUNT_WEEK)
-    {
-        cutoff = now - (TEST_TIMES ? (5 * 60) : (7 * 24 * 60 * 60));
-    }
-    else if (type == COUNT_DAY)
-    {
-        cutoff = now - (TEST_TIMES ? (3 * 60) : (24 * 60 * 60));
-        if (m_clear_day_time > cutoff)
-            cutoff = m_clear_day_time;
-    }
-    else // type == COUNT_HOUR
-    {
-        cutoff = now - (TEST_TIMES ? (1 * 60) : (60 * 60));
-        if (m_clear_hour_time > cutoff)
-            cutoff = m_clear_hour_time;
-    }
-
-    int count = 0;
-    int head = run_head - 1;
-    if (head < 0)
-        head = MAX_RUN_HISTORY-1;
-    runHistory_t *ptr = &run_history[head];
-
-    while (ptr->tm && ptr->tm >= cutoff)
-    {
-        count++;
-        // LOGD("    Counting run(%d) at %s",count,timeToString(ptr->tm).c_str());
-        head--;
-        if (head < 0)
-            head == MAX_RUN_HISTORY-1;
-        if (head == run_head)
-            break;
-        ptr = &run_history[head];
-    }
-
-    // LOGD("countRuns(%d) returning %d",hours,count);
-    return count;
-}
-
-
-static time_t countBackRuns(int num)
-{
-    #if DEBUG_COUNTS
-        LOGD("countBackRuns(%d)",num);
-    #endif
-
-    int count = 0;
-    int head = run_head - 1;
-    if (head < 0)
-        head = MAX_RUN_HISTORY-1;
-    runHistory_t *ptr = &run_history[head];
-
-    // so if the error is set to 4 per hour, we want to return the
-    // time of the 4th one back
-
-    while (ptr->tm)
-    {
-        count++;
-        if (count == num)
-        {
-            #if DEBUG_COUNTS
-                LOGD("    countBackRuns(%d) returning(%d) at %s",num,count,timeToString(ptr->tm).c_str());
-            #endif
-            return ptr->tm;
-        }
-
-        #if DEBUG_COUNTS
-            LOGD("    countBackRuns(%d) skipping(%d) at %s",num,count,timeToString(ptr->tm).c_str());
-        #endif
-
-        head--;
-        if (head < 0)
-            head == MAX_RUN_HISTORY-1;
-        if (head == run_head)
-            break;
-        ptr = &run_history[head];
-    }
-
-    // should never get here, since the history just triggered an error
-
-    return 0;
-}
 
 
 
@@ -438,12 +318,240 @@ void bilgeAlarm::setup()
         5,  	        // note that the priority is higher than one
         NULL);
 
+    _history_link = "<a href='/custom/getHistory?uuid=";
+    _history_link += getUUID();
+    _history_link += "' target='_blank'>History</a>";
+
     proc_leave();
     LOGD("bilgeAlarm::setup(%s) completed",getVersion());
 
 
 }
 
+
+//-----------------------------------------------
+// in-memory list of pump_runs (database)
+//-----------------------------------------------
+
+void bilgeAlarm::startRun()
+{
+    time_t now = time(NULL);
+    m_start_duration = now;
+    LOGU("PUMP ON(%d)",run_head);
+    runHistory_t *ptr = &run_history[run_head];
+    ptr->tm = now;
+    ptr->dur = 0;
+    setTime(ID_TIME_LAST_RUN,now);
+    setInt(ID_SINCE_LAST_RUN,(int32_t)now);
+    setInt(ID_DUR_LAST_RUN,0);
+}
+
+void bilgeAlarm::endRun()
+{
+    time_t now = time(NULL);
+    int duration = now - m_start_duration;
+    if (duration == 0) duration = 1;
+    LOGU("PUMP OFF(%d) %d secs",run_head,duration);
+    runHistory_t *ptr = &run_history[run_head];
+    ptr->dur = duration;
+    setInt(ID_DUR_LAST_RUN,duration);
+    m_start_duration = 0;
+    if (++run_head >= MAX_RUN_HISTORY)
+        run_head = 0;
+}
+
+
+int bilgeAlarm::countRuns(int type)
+    // note that this does NOT count the current run which is happening
+    // it only counts fully commited runs, so per_day and per_hour alarms
+    // happen when the pump turns OFF.   Due to the alarm clearing strategy,
+    // the and week counts shown after a clear will more or less be zeroed,
+    // though the history still contains all the runs.
+{
+    // LOGD("countRuns(%d) run_head=%d",hours,run_head);
+    // can't really debug in here since it is called every second
+
+    uint32_t cutoff;
+    time_t now = time(NULL);
+
+    if (type == COUNT_WEEK)
+    {
+        cutoff = now - (TEST_TIMES ? (5 * 60) : (7 * 24 * 60 * 60));
+    }
+    else if (type == COUNT_DAY)
+    {
+        cutoff = now - (TEST_TIMES ? (3 * 60) : (24 * 60 * 60));
+        if (m_clear_day_time > cutoff)
+            cutoff = m_clear_day_time;
+    }
+    else // type == COUNT_HOUR
+    {
+        cutoff = now - (TEST_TIMES ? (1 * 60) : (60 * 60));
+        if (m_clear_hour_time > cutoff)
+            cutoff = m_clear_hour_time;
+    }
+
+    int count = 0;
+    int head = run_head - 1;
+    if (head < 0)
+        head = MAX_RUN_HISTORY-1;
+    runHistory_t *ptr = &run_history[head];
+
+    while (ptr->tm && ptr->tm >= cutoff)
+    {
+        count++;
+        // LOGD("    Counting run(%d) at %s",count,timeToString(ptr->tm).c_str());
+        head--;
+        if (head < 0)
+            head = MAX_RUN_HISTORY-1;
+        if (head == run_head)
+            break;
+        ptr = &run_history[head];
+    }
+
+    // LOGD("countRuns(%d) returning %d",hours,count);
+    return count;
+}
+
+
+static time_t countBackRuns(int num)
+{
+    #if DEBUG_COUNTS
+        LOGD("countBackRuns(%d)",num);
+    #endif
+
+    int count = 0;
+    int head = run_head - 1;
+    if (head < 0)
+        head = MAX_RUN_HISTORY-1;
+    runHistory_t *ptr = &run_history[head];
+
+    // so if the error is set to 4 per hour, we want to return the
+    // time of the 4th one back
+
+    while (ptr->tm)
+    {
+        count++;
+        if (count == num)
+        {
+            #if DEBUG_COUNTS
+                LOGD("    countBackRuns(%d) returning(%d) at %s",num,count,timeToString(ptr->tm).c_str());
+            #endif
+            return ptr->tm;
+        }
+
+        #if DEBUG_COUNTS
+            LOGD("    countBackRuns(%d) skipping(%d) at %s",num,count,timeToString(ptr->tm).c_str());
+        #endif
+
+        head--;
+        if (head < 0)
+            head = MAX_RUN_HISTORY-1;
+        if (head == run_head)
+            break;
+        ptr = &run_history[head];
+    }
+
+    // should never get here, since the history just triggered an error
+
+    return 0;
+}
+
+
+// might be a stack overflow
+// building this on the stack
+
+static String historyHTML()
+{
+    String rslt = "<head>\n";
+    rslt += "<title>";
+    rslt += bilge_alarm->getName();
+    rslt += " History</title>\n";
+    rslt += "<body>\n";
+    rslt += "<style>\n";
+    rslt += "th, td { padding-left: 12px; padding-right: 12px; }\n";
+    rslt += "</style>\n";
+
+    // this loop should be abstracted
+
+    int head = run_head - 1;
+    if (head < 0)
+        head = MAX_RUN_HISTORY-1;
+    runHistory_t *ptr = &run_history[head];
+    int count = 0;
+
+    while (ptr->tm)
+    {
+        count++;
+        if (count == 1)
+        {
+            rslt += "<b>";
+            rslt +=  bilge_alarm->getName();
+            rslt += " History</b><br><br>\n";
+            rslt += "<table border='1' padding='6' style='border-collapse:collapse'>\n";
+            rslt += "<tr><th>num</th><th>time</th><th>dur</th><th>ago</th></tr>\n";
+        }
+
+        rslt += "<tr><td>";
+        rslt += String(count);
+        rslt += "  (";
+        rslt += String(head);
+        rslt += ")";
+        rslt += "</td><td>";
+        rslt += timeToString(ptr->tm);
+        rslt += "</td><td align='center'>";
+        rslt += String(ptr->dur);
+        rslt += "</td><td>";
+
+        // anything over a 5 years year is considered invalid to deal with potential lack of clock issues
+
+        char buf[128] = "&nbsp;";
+        uint32_t since = time(NULL) - ptr->tm;
+        if (since < 5 * 365 * 24 * 60 * 60)
+        {
+            int days = since / (24 * 60 * 60);
+            int hours = (since % (24 * 60 * 60)) / (60 * 60);
+            int minutes = (since % (24 * 60 * 60 * 60)) / 60;
+            int secs = since % 60;
+            if (days)
+            {
+                sprintf(buf,"%d days  %02d:%02d:%02d",days, hours, minutes, secs);
+            }
+            else
+            {
+                sprintf(buf,"%02d:%02d:%02d",hours, minutes, secs);
+            }
+        }
+        rslt += buf;
+        rslt += "</td></tr>\n";
+
+        head--;
+        if (head < 0)
+            head = MAX_RUN_HISTORY-1;
+        if (head == run_head)
+            break;
+        ptr = &run_history[head];
+    }
+
+    if (!count)
+        rslt += "THERE IS NO HISTORY OF PUMP RUNS AT THIS TIME\n";
+    else
+        rslt += "</table>";
+
+    rslt += "</body>\n";
+    return rslt;
+}
+
+
+
+String bilgeAlarm::onCustomLink(const String &path)
+{
+    if (path.startsWith("getHistory"))
+    {
+        return historyHTML();
+    }
+    return "";
+}
 
 
 //------------------------------------

@@ -8,6 +8,17 @@
 #include <LiquidCrystal_I2C.h>
 
 
+#define DEBUG_SCREEN  0
+
+
+#if DEBUG_SCREEN
+    #define DBG_SCREEN(...)     LOGD(__VA_ARGS__)
+#else
+    #define DBG_SCREEN(...)
+#endif
+
+
+
 #define REFRESH_MILLIS            30
 
 #define LCD_LINE_LEN              16
@@ -108,11 +119,11 @@ static const char *stateName(uint32_t state)
     if (state & STATE_EMERGENCY)            return "EMERG PUMP RAN";
     if (state & STATE_CRITICAL_TOO_LONG)    return "RUN WAY TOO LONG";
     if (state & STATE_TOO_LONG)             return "RUN TOO LONG";
-    if (state & STATE_TOO_OFTEN_DAY)        return "TOO OFTEN_DAY";
+    if (state & STATE_TOO_OFTEN_DAY)        return "TOO OFTEN DAY";
     if (state & STATE_TOO_OFTEN_HOUR)       return "TOO OFTEN HOUR";
     if (state & STATE_RELAY_EMERGENCY)      return "RELAY_EMERGENCY";
     if (state & STATE_RELAY_ON)             return "RELAY_ON";
-    if (state & STATE_RELAY_FORCED)         return "FORCE_RELAY_ON";
+    if (state & STATE_RELAY_FORCED)         return "FORCE RELAY ON";
     if (state & STATE_PUMP1_ON)             return "PUMP_ON";
     return "NONE";
 }
@@ -242,7 +253,7 @@ void baScreen::setScreen(int screen_num)
     if (m_screen_num != screen_num)
     {
         m_prev_screen = m_screen_num;
-        LOGD("setScreen(%d)",screen_num);
+        DBG_SCREEN("setScreen(%d)",screen_num);
         m_last_screen_time = millis();
         m_screen_num = screen_num;
     }
@@ -504,7 +515,7 @@ void baScreen::loop()
 bool baScreen::onButton(int button_num, int event_type)
     // called from baButtons::loop()
 {
-    LOGD("baScreen::onButton(%d,%d)",button_num,event_type);
+    DBG_SCREEN("baScreen::onButton(%d,%d)",button_num,event_type);
 
     uint32_t state = bilgeAlarm::getState();
     uint32_t alarm_state = bilgeAlarm::getAlarmState();

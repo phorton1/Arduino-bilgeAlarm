@@ -106,6 +106,7 @@
     #define ID_DEMO_MODE        "DEMO_MODE"
 #endif
 
+#define ID_HISTORY_LINK         "HISTORY_LINK"
 
 
 //------------------------
@@ -177,6 +178,8 @@ private:
     static int      _num_last_day;
     static int      _num_last_week;
 
+    static String _history_link;
+
     static bool _disabled;
     static int  _backlight_secs;
     static int  _err_run_time;
@@ -238,7 +241,8 @@ private:
         static void onLcdLine(const myIOTValue *desc, const char *val);
     #endif
 
-    static void lcdPrint(int line, const char *msg);
+    virtual String onCustomLink(const String &path) override;
+
 };
 
 
