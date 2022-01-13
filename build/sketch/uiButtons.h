@@ -22,6 +22,10 @@ class uiButtons
 
         void loop();
 
+        bool setRepeatMask(uint16_t mask)  {m_repeat_mask = mask; }
+            // enables repeats from buttons by mask
+            // button0 == 1, button1=2, and button3=4
+
     private:
 
         int      m_pins[NUM_BUTTONS];
@@ -30,8 +34,6 @@ class uiButtons
         uint32_t m_poll_time;
         uint32_t m_time;
         int      m_repeat_count;
+        bool     m_repeat_mask;
         bool     m_handled;
 };
-
-
-

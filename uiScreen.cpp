@@ -31,10 +31,27 @@
 #define ALARM_CLEARED_DURATION    4000
     // keep the stats screen on a little longer
 
+// Errors take over the whole button scheme
+//     - any button to suppress alarm
+//     - any button to clear alarm
+// Otherwise, you can be in a MODE on a SCREEN and it will
+//     not change for at least MENU_DELAY seconds.
+//     After no activity for MENU_DELAY seconds,
+//     the system returns tot he MAIN_MODE and MAIN_SCREEN.
+//
+// A long click of the left button changes between MAIN and CONFIG modes
+// A click of left button cycles through screen within the mode
+//     The right button is used to perform commands
+//     The middle and right buttons are decrement and increment for values
+// In commands that require a confirm,
+//     The right button is YES, and the middle button is NO
+// A click of the middle button while in MAIN_MODE toggles to STATS mode
+//     In stats mode, the right button decrements screens
+
 
 #define MENU_MODE_MAIN      0     // main mode - main screen and commands
-#define MENU_MODE_CONFIG    1     // config mode - modify config options
-#define MENU_MODE_ERROR     2     // well, it should be zero now.
+#define MENU_MODE_STATS     1     // stats mode - cycle through history if any
+#define MENU_MODE_CONFIG    2     // config mode - modify config options
 
 
 #define SCREEN_ERROR            0
@@ -52,6 +69,7 @@
 #define SCREEN_CONFIRM          10
 
 #define SCREEN_CONFIG_BASE      11
+#define SCREEN_STATS_BASE       12
 
 
 
@@ -72,6 +90,7 @@ const char *screens[] = {
     "CONFIRM",              "%S",                   // 10
 
     "CONFIG",               "BASE",                 // 11
+    "STATS",                "NEXT        PREV",     // 12
 };
 
 
@@ -81,12 +100,8 @@ uiButtons *ui_buttons = NULL;
 LiquidCrystal_I2C lcd(0x27,LCD_LINE_LEN,2);   // 20,4);
     // set the LCD address to 0x27 for a 16 chars and 2 line display
 
-// const char *cur_value_id = NULL;
-
 
 uiScreen::uiScreen(int *button_pins)
-    // The screen maintains itself if times or
-    // config options change.
 {
     m_started = false;
     m_screen_num = -1;
@@ -160,55 +175,11 @@ void uiScreen::onValueChanged(const myIOTValue *value)
 // implementation
 //-----------------------------------
 
-// const char *off_secs(int i)
-// {
-//     if (i<0) i=0;
-//     if (i>255) i=255;
-//     if (i)
-//         sprintf(screen_num_buf,"%3d",i);
-//     else
-//         strcpy_P(screen_num_buf,PSTR("off"));
-//     return screen_num_buf;
-// }
-//
-// const char *enabled_disabled(int i)
-// {
-//     return i ?
-//         PSTR("disabled") :
-//         PSTR("enabled");
-// }
-//
-// const char *start_end(int i)
-// {
-//     return i ?
-//         PSTR("end") :
-//         PSTR("start");
-// }
-//
 
 static const char *off_on(bool b)
 {
     return b ? "on" : "off";
 }
-
-//
-// const char *getPrefValueString(int pref_num,int pref_value)
-// {
-//     const char *ts;
-//     if (pref_num == PREF_DISABLED)
-//         ts = enabled_disabled(pref_value);
-//     else if (pref_num == PREF_EXTRA_PRIMARY_MODE)
-//         ts = start_end(pref_value);
-//     else if (pref_num == PREF_END_PUMP_RELAY_DELAY)
-//     {
-//         sprintf(screen_num_buf,"%3d",pref_value);
-//         ts = screen_num_buf;
-//     }
-//     else
-//         ts = off_secs(pref_value);
-//     return  ts;
-// }
-//
 
 
 void uiScreen::backlight(int val)
@@ -255,6 +226,23 @@ void uiScreen::setScreen(int screen_num)
         m_last_screen_time = millis();
         m_screen_num = screen_num;
     }
+
+    if (screen_num >= SCREEN_STATS_BASE)
+    {
+        m_menu_mode = MENU_MODE_STATS;
+        ui_buttons->setRepeatMask(3);
+    }
+    else if (screen_num >= SCREEN_CONFIG_BASE)
+    {
+        m_menu_mode = MENU_MODE_CONFIG;
+        ui_buttons->setRepeatMask(6);
+    }
+    else
+    {
+        m_menu_mode = MENU_MODE_MAIN;
+        ui_buttons->setRepeatMask(0);
+    }
+
 
     uint32_t state = bilgeAlarm::getState();
     uint32_t alarm_state = bilgeAlarm::getAlarmState();
@@ -371,8 +359,6 @@ void uiScreen::setScreen(int screen_num)
 
 
 void uiScreen::loop()
-    // The screen maintains itself for auto rotation
-    // or if times or values changes
 {
     if (!m_started)
     {
@@ -563,7 +549,6 @@ bool uiScreen::onButton(int button_num, int event_type)
         {
             if (event_type == BUTTON_TYPE_LONG_CLICK)
             {
-                m_menu_mode = MENU_MODE_CONFIG;
                 setScreen(SCREEN_CONFIG_BASE);
                 return true;
             }
@@ -573,44 +558,59 @@ bool uiScreen::onButton(int button_num, int event_type)
                     setScreen(SCREEN_MAIN);
                 else
                     setScreen(m_screen_num+1);
-                return true;
             }
         }
-        else if (button_num == 2)
+        else if (event_type == BUTTON_TYPE_CLICK)
         {
-            switch (m_screen_num)
+            if (button_num == 1)
             {
-                case SCREEN_RELAY:
-                {
-                    bool relay_on = state & STATE_RELAY_FORCED;
-                    bilge_alarm->setBool(ID_FORCE_RELAY,!relay_on);
-                    setScreen(m_screen_num);
-                    break;
-                }
-                case SCREEN_SELFTEST:
-                    // bilgeAlarm::selfTest();
-                    break;
-                case SCREEN_CLEAR_HISTORY:
-                case SCREEN_REBOOT :
-                case SCREEN_FACTORY_RESET:
-                    setScreen(SCREEN_CONFIRM);
-                    break;
-                case SCREEN_CONFIRM:
-                    if (m_prev_screen == SCREEN_CLEAR_HISTORY)
-                         bilgeAlarm::clearHistory();
-                    else if (m_prev_screen == SCREEN_REBOOT)
-                        bilgeAlarm::reboot();
-                    else if (m_prev_screen == SCREEN_FACTORY_RESET)
-                        bilgeAlarm::factoryReset();
-                    setScreen(SCREEN_MAIN);
-                    break;
+                if (m_screen_num == SCREEN_CONFIRM)
+                    setScreen(m_prev_screen);
+                else
+                    setScreen(SCREEN_STATS_BASE);
             }
-            return true;
+            else if (button_num == 2)
+            {
+                switch (m_screen_num)
+                {
+                    case SCREEN_RELAY:
+                    {
+                        bool relay_on = state & STATE_RELAY_FORCED;
+                        bilge_alarm->setBool(ID_FORCE_RELAY,!relay_on);
+                        setScreen(m_screen_num);
+                        break;
+                    }
+                    case SCREEN_SELFTEST:
+                        // bilgeAlarm::selfTest();
+                        break;
+                    case SCREEN_CLEAR_HISTORY:
+                    case SCREEN_REBOOT :
+                    case SCREEN_FACTORY_RESET:
+                        setScreen(SCREEN_CONFIRM);
+                        break;
+                    case SCREEN_CONFIRM:
+                        if (m_prev_screen == SCREEN_CLEAR_HISTORY)
+                             bilgeAlarm::clearHistory();
+                        else if (m_prev_screen == SCREEN_REBOOT)
+                            bilgeAlarm::reboot();
+                        else if (m_prev_screen == SCREEN_FACTORY_RESET)
+                            bilgeAlarm::factoryReset();
+                        setScreen(SCREEN_MAIN);
+                        break;
+                }
+            }
         }
-        else if (button_num == 1)
+    }
+
+    //-----------------------------------
+    // STATS
+    //-----------------------------------
+
+    else if (m_menu_mode == MENU_MODE_STATS)
+    {
+        if (button_num == 1)
         {
-            if (m_screen_num == SCREEN_CONFIRM)
-                setScreen(m_prev_screen);
+            setScreen(SCREEN_MAIN);
         }
     }
 
@@ -618,69 +618,16 @@ bool uiScreen::onButton(int button_num, int event_type)
     // CONFIG
     //---------------------------
 
-    else // if (m_menu_mode == MENU_MODE_CONFIG)
+    else // (m_menu_mode == MENU_MODE_CONFIG)
     {
         if (button_num == 0)
         {
             if (event_type == BUTTON_TYPE_LONG_CLICK)
             {
-                m_menu_mode = MENU_MODE_MAIN;
                 setScreen(SCREEN_MAIN);
-                return true;
-            }
-            else if (event_type == BUTTON_TYPE_CLICK)
-            {
-                // if (m_screen_num == SCREEN_CONFIG_BASE + NUM_PREFS - 2)
-                //     setScreen(SCREEN_PREF_BASE);
-                // else
-                //     setScreen(m_screen_num+1);
-                return true;
             }
         }
-
-        // handle pref modifications with repeat and release events
-        // always returns false
-
-        // else
-        // {
-        //     int pref_num = m_screen_num - SCREEN_PREF_BASE + 1;
-        //     if (event_type == BUTTON_TYPE_PRESS)
-        //         m_last_pref_value = getPref(pref_num);
-        //
-        //     // set the pref upon release
-        //     // otherwise inc or dec
-        //
-        //     if (event_type == BUTTON_TYPE_CLICK)
-        //         setPref(pref_num,m_last_pref_value);
-        //     else
-        //     {
-        //         int inc = (button_num == 1) ? -1 : 1;
-        //         int pref_max = getPrefMax(pref_num);
-        //         m_last_pref_value += inc;
-        //
-        //         // constrain backlight to 0,30..255
-        //         // to prevent pesky behavior
-        //
-        //         if (pref_num == PREF_BACKLIGHT_SECS)
-        //         {
-        //             if (inc<0 && m_last_pref_value == 29)
-        //                 m_last_pref_value = 0;
-        //             if (inc>0 && m_last_pref_value == 1)
-        //                 m_last_pref_value = 30;
-        //         }
-        //
-        //
-        //         if (m_last_pref_value < 0)
-        //             m_last_pref_value = 0;
-        //         if (m_last_pref_value > pref_max)
-        //             m_last_pref_value = pref_max;
-        //
-        //     }
-        //
-        //     int n1 = m_screen_num * 2 + 1;
-        //     print_lcd(1,n1,getPrefValueString(pref_num,m_last_pref_value));
-        // }
     }
 
-    return false;
+    return true;
 }

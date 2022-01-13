@@ -26,6 +26,9 @@ static void alarmTask(void *param)
     // Be sure to bracket LOG calls in #if DEBUG_ALARMS
 {
     delay(3000);
+    #if DEBUG_ALARMS
+        LOGI("starting alarmTask loop on core(%d)",xPortGetCoreID());
+    #endif
 
     static bool alarm_on = false;
     static uint32_t alarm_time = 0;
@@ -82,7 +85,7 @@ void startAlarm()
     LOGI("starting alarmTask");
     xTaskCreate(alarmTask,
         "alarmTask",
-        DEBUG_ALARM ? 4096 : 1024,  // very small stack unless debuggin
+        DEBUG_ALARM ? 4096 : 1024,  // very small stack unless debugging
         NULL,           // param
         5,  	        // note that the priority is higher than one
         NULL);

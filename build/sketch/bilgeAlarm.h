@@ -144,6 +144,26 @@
 #define STATE_RELAY_EMERGENCY       0x0200      // the relay is on due to the ID_RUN_EMERGENCY value
 #define STATE_RELAY_EXTRA           0x0400      // the relay is on due to the ID_EXTRA_RUN_TIME value
 
+// reported states (in html history)
+// note that theses DONT overlap with ALARM_STATE_ANY
+// and that they all fit in a uint16
+
+#define STATE_REPORT_ERROR  (STATE_TOO_OFTEN_HOUR | STATE_TOO_OFTEN_DAY | STATE_TOO_LONG | STATE_CRITICAL_TOO_LONG)
+
+typedef struct
+    // a structure containing the states used by stateMachine()
+    // for asynchronous publishing during loop()
+{
+    uint32_t state;
+    uint32_t alarm_state;
+    time_t   time_last_run;
+    int      since_last_run;   // time_last_run as an int
+    int      dur_last_run;
+    int      num_last_hour;
+    int      num_last_day;
+    int      num_last_week;
+} bilgeAlarmState_t;
+
 
 
 class bilgeAlarm : public myIOTDevice
@@ -166,6 +186,7 @@ public:
 private:
 
     static const valDescriptor m_bilge_values[];
+    static bilgeAlarmState_t m_publish_state;
 
     // values
 
@@ -217,6 +238,9 @@ private:
     // methods
 
     void stateMachine();
+    void publishState();
+    static void stateTask(void *param);
+
     static void setState(uint32_t state);
     static void setAlarmState(uint32_t alarm_state);
 
@@ -231,7 +255,6 @@ private:
     #if HAS_LCD_LINE_VALUES
         static void onLcdLine(const myIOTValue *desc, const char *val);
     #endif
-
 
 };
 

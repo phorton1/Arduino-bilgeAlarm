@@ -30,6 +30,7 @@ uiButtons::uiButtons(int *pins)
     m_poll_time = 0;
     m_time = 0;
     m_repeat_count = 0;
+    m_repeat_mask = 0;
     m_handled = 0;
 
     for (int i=0; i<NUM_BUTTONS; i++)
@@ -82,7 +83,7 @@ void uiButtons::loop()
             {
                 int dif = now - m_time;
 
-                if (i>0)
+                if (mask & m_repeat_mask)
                 {
                     #define START_REPEAT_DELAY   300    // ms
                     #define LONG_PRESS_TIME     1800    // ms

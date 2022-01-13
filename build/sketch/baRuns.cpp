@@ -6,13 +6,6 @@
 #include <myIOTLog.h>
 
 
-typedef struct {
-    time_t  tm;
-    uint16_t dur;
-    uint16_t flags;   // == emergency pump
-} runHistory_t;
-
-
 static time_t start_duration;
     // The "duration" that pump1 is "on"
     // INCLUDES the "extra_time" if EXTRA_MODE(0) "at_start", so
@@ -26,7 +19,7 @@ static time_t clear_hour_time;
 
 static runHistory_t run_history[MAX_RUN_HISTORY];
 static int run_head = 0;
-
+static int prev_head = -1;
 
 
 uint32_t getStartDuration()
@@ -37,28 +30,21 @@ uint32_t getStartDuration()
 
 void setRunFlags(uint16_t flags)
 {
-    run_history[run_head].flags |= flags;
+    run_history[prev_head].flags |= flags;
 }
 
 
-extern void updateStartDuration()
+void updateStartDuration()
 {
     start_duration = time(NULL);
-    // static time_t last_duration = 0;
-    // if (last_duration != start_duration)
-    // {
-    //     last_duration = start_duration;
-    //     LOGD("updateStartDuration(%f)",start_duration);
-    // }
 }
 
 void clearRuns()
 {
     run_head = 0;
+    prev_head = -1;
     memset(run_history,0,MAX_RUN_HISTORY * sizeof(runHistory_t));
-    bilge_alarm->setTime(ID_TIME_LAST_RUN,0);
-    bilge_alarm->setInt(ID_SINCE_LAST_RUN,0);
-    bilge_alarm->setInt(ID_DUR_LAST_RUN,0);
+
 }
 
 
@@ -71,24 +57,63 @@ void startRun()
     ptr->tm = now;
     ptr->dur = 0;
     ptr->flags = 0;
-    bilge_alarm->setTime(ID_TIME_LAST_RUN,now);
-    bilge_alarm->setInt(ID_SINCE_LAST_RUN,(int32_t)now);
-    bilge_alarm->setInt(ID_DUR_LAST_RUN,0);
+    prev_head = run_head;
+    run_head++;
+    if (run_head >= MAX_RUN_HISTORY)
+        run_head = 0;
 }
 
-void endRun()
+
+uint32_t endRun()
 {
     time_t now = time(NULL);
     int duration = now - start_duration;
     if (duration == 0) duration = 1;
-    LOGU("PUMP OFF(%d) %d secs",run_head,duration);
-    runHistory_t *ptr = &run_history[run_head];
+    LOGU("PUMP OFF(%d) %d secs",prev_head,duration);
+    runHistory_t *ptr = &run_history[prev_head];
     ptr->dur = duration;
-    bilge_alarm->setInt(ID_DUR_LAST_RUN,duration);
     start_duration = 0;
-    if (++run_head >= MAX_RUN_HISTORY)
-        run_head = 0;
+    return duration;
 }
+
+
+
+void initRunIterator(int *iterator)
+{
+    *iterator = run_head;
+}
+
+
+runHistory_t *getNextRun(int *iterator)
+{
+    int head = *iterator;
+    head -= 1;
+    if (head < 0)
+        head = MAX_RUN_HISTORY-1;
+    if (head == run_head)
+        return NULL;
+    if (!run_history[head].tm)
+        return NULL;
+
+    *iterator = head;
+    return &run_history[head];
+}
+
+
+runHistory_t *getPrevRun(int *iterator)
+{
+    int head = *iterator;
+    head++;
+    if (head >=  MAX_RUN_HISTORY)
+        head = 0;
+    if (head == run_head)
+        return NULL;
+    if (!run_history[head].tm)
+        return NULL;
+    *iterator = head;
+    return &run_history[head];
+}
+
 
 
 int countRuns(int type)
@@ -101,7 +126,7 @@ int countRuns(int type)
     // LOGD("countRuns(%d) run_head=%d",hours,run_head);
     // can't really debug in here since it is called every second
 
-    uint32_t cutoff;
+    uint32_t cutoff = 0;        // COUNT_ALL
     time_t now = time(NULL);
 
     if (type == COUNT_WEEK)
@@ -121,25 +146,17 @@ int countRuns(int type)
             cutoff = clear_hour_time;
     }
 
+    int iter = 0;
     int count = 0;
-    int head = run_head - 1;
-    if (head < 0)
-        head = MAX_RUN_HISTORY-1;
-    runHistory_t *ptr = &run_history[head];
+    initRunIterator(&iter);
+    runHistory_t *ptr = getNextRun(&iter);
 
-    while (ptr->tm && ptr->tm >= cutoff)
+    while (ptr && ptr->tm >= cutoff)
     {
         count++;
-        // LOGD("    Counting run(%d) at %s",count,timeToString(ptr->tm).c_str());
-        head--;
-        if (head < 0)
-            head = MAX_RUN_HISTORY-1;
-        if (head == run_head)
-            break;
-        ptr = &run_history[head];
+        ptr = getNextRun(&iter);
     }
 
-    // LOGD("countRuns(%d) returning %d",hours,count);
     return count;
 }
 
@@ -150,45 +167,28 @@ void setRunWindow(int type, int num)
         LOGD("setRunWindow(%d,%d)",type,num);
     #endif
 
+    int iter = 0;
     int count = 0;
-    int head = run_head - 1;
-    if (head < 0)
-        head = MAX_RUN_HISTORY-1;
-    runHistory_t *ptr = &run_history[head];
+    initRunIterator(&iter);
+    runHistory_t *ptr = getNextRun(&iter);
 
-    // so if the error is set to 4 per hour, we want to return the
-    // time of the 4th one back
-
-    time_t rslt = 0;
-    while (ptr->tm)
+    while (ptr)
     {
         count++;
-        if (count == num)
-        {
-            rslt = ptr->tm;
+        if (count >= num)
             break;
-        }
-
-        #if DEBUG_RUNS
-            LOGD("setRunWindow(%d,%d) skipping(%d) at %s",type,num,count,timeToString(ptr->tm).c_str());
-        #endif
-
-        head--;
-        if (head < 0)
-            head = MAX_RUN_HISTORY-1;
-        if (head == run_head)
-            break;
-        ptr = &run_history[head];
+        ptr = getNextRun(&iter);
     }
 
-    // should never get here, since the history just triggered an error
-
-    LOGU("setRunWindow(%d,%d)=%s",type,num,timeToString(rslt));
+    time_t rslt = ptr ? ptr->tm : 0;
+    LOGU("setRunWindow(%d,%d)=%s",type,num,timeToString(rslt).c_str());
     if (type == COUNT_DAY)
         clear_day_time = rslt;
     else
         clear_hour_time = rslt;
 }
+
+
 
 
 // might be a stack overflow
@@ -205,15 +205,12 @@ String historyHTML()
     rslt += "th, td { padding-left: 12px; padding-right: 12px; }\n";
     rslt += "</style>\n";
 
-    // this loop should be abstracted
-
-    int head = run_head - 1;
-    if (head < 0)
-        head = MAX_RUN_HISTORY-1;
-    runHistory_t *ptr = &run_history[head];
+    int iter = 0;
     int count = 0;
+    initRunIterator(&iter);
+    runHistory_t *ptr = getNextRun(&iter);
 
-    while (ptr->tm)
+    while (ptr)
     {
         count++;
         if (count == 1)
@@ -228,7 +225,7 @@ String historyHTML()
         rslt += "<tr><td>";
         rslt += String(count);
         rslt += "  (";
-        rslt += String(head);
+        rslt += String(iter);
         rslt += ")";
         rslt += "</td><td>";
         rslt += timeToString(ptr->tm);
@@ -258,15 +255,17 @@ String historyHTML()
         rslt += buf;
 
         rslt += "</td><td align='center'>";
-        rslt += ptr->flags ? "EMERGENCY" : "&nbsp;";
+
+        if (ptr->flags & ALARM_STATE_EMERGENCY) rslt += "EMERGENCY ";
+        if (ptr->flags & ALARM_STATE_CRITICAL) rslt += "CRITICAL ";
+        if (ptr->flags & ALARM_STATE_ERROR) rslt += "ERROR ";
+        if (ptr->flags & STATE_CRITICAL_TOO_LONG) rslt += "WAY TOO LONG ";
+        else if (ptr->flags & STATE_TOO_LONG) rslt += "TOO LONG ";
+        if (ptr->flags & STATE_TOO_OFTEN_HOUR) rslt += "TOO OFTEN ";
+        if (ptr->flags & STATE_TOO_OFTEN_DAY) rslt += "TOO OFTEN DAY";
         rslt += "</td></tr>\n";
 
-        head--;
-        if (head < 0)
-            head = MAX_RUN_HISTORY-1;
-        if (head == run_head)
-            break;
-        ptr = &run_history[head];
+        ptr = getNextRun(&iter);
     }
 
     if (!count)
