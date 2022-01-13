@@ -2,36 +2,17 @@
 // bilgeAlarm.cpp
 //-----------------------------------
 #include "bilgeAlarm.h"
-#include "baScreen.h"
+#include "uiScreen.h"
+#include "baExterns.h"
 #include <myIOTLog.h>
 
 
 #define DEBUG_STATES  1
-#define DEBUG_ALARM   0
-#define DEBUG_COUNTS  0
 
-
-#define TEST_TIMES  1
-    // define allows me to test in compressed time where
-    // one hour == 1 minute, one day=3 minutes, and one week==5 minutes
 
 #define BUTTON_CHECK_TIME  30
 #define UI_UPDATE_TIME     30
 
-
-#define MAX_RUN_HISTORY    256      // 256 * 8 = 2K
-    // set to smaller number (i.e 15) for testing circular buffer
-    //
-    // circular buffer of run history, where each history element
-    // is 8 bytes (two 32 bit numbers), the first being the time
-    // of the run, and the second being the duration of the run in seconds.
-    // The buffer MUST be large enough to handle all the runs in a day,
-    // or certainly at least more than the error configuration values
-
-#define COUNT_HOUR   0
-#define COUNT_DAY    1
-#define COUNT_WEEK   2
-    // the type of count to do
 
 //--------------------------------
 // bilgeAlarm definition
@@ -242,25 +223,6 @@ uint32_t bilgeAlarm::m_relay_delay_time;
 uint32_t bilgeAlarm::m_relay_time;
 bool     bilgeAlarm::m_suppress_next_after;
 
-time_t bilgeAlarm::m_start_duration;
-    // The "duration" that pump1 is "on"
-    // INCLUDES the "extra_time" if EXTRA_MODE(0) "at_start", so
-    // the ERR_RUN_TIME and CRIT_RUN_TIME values must be larger than EXTRA_RUN_TIME
-    // if using EXTRA_RUN_MODE(0) "at_start"
-time_t bilgeAlarm::m_clear_day_time;
-time_t bilgeAlarm::m_clear_hour_time;
-    // if a clearError is done, these prevents countRuns() from returning
-    // any runs before this time.
-
-
-typedef struct {
-    time_t  tm;
-    int     dur;
-} runHistory_t;
-
-
-static runHistory_t run_history[MAX_RUN_HISTORY];
-static int run_head = 0;
 
 
 bilgeAlarm *bilge_alarm = NULL;
@@ -305,18 +267,12 @@ void bilgeAlarm::setup()
     // pinMode(PIN_12V_IN,   INPUT);
 
     int button_pins[] = {PIN_BUTTON0,PIN_BUTTON1,PIN_BUTTON2};
-    // ba_screen =
-    new baScreen(button_pins);
+    // ui_screen =
+    new uiScreen(button_pins);
 
     myIOTDevice::setup();
 
-    LOGI("starting alarmTask");
-    xTaskCreate(alarmTask,
-        "alarmTask",
-        DEBUG_ALARM ? 4096 : 1024,  // very small stack unless debuggin
-        NULL,           // param
-        5,  	        // note that the priority is higher than one
-        NULL);
+    startAlarm();
 
     _history_link = "<a href='/custom/getHistory?uuid=";
     _history_link += getUUID();
@@ -324,292 +280,13 @@ void bilgeAlarm::setup()
 
     proc_leave();
     LOGD("bilgeAlarm::setup(%s) completed",getVersion());
-
-
 }
 
-
-//-----------------------------------------------
-// in-memory list of pump_runs (database)
-//-----------------------------------------------
-
-void bilgeAlarm::startRun()
-{
-    time_t now = time(NULL);
-    m_start_duration = now;
-    LOGU("PUMP ON(%d)",run_head);
-    runHistory_t *ptr = &run_history[run_head];
-    ptr->tm = now;
-    ptr->dur = 0;
-    setTime(ID_TIME_LAST_RUN,now);
-    setInt(ID_SINCE_LAST_RUN,(int32_t)now);
-    setInt(ID_DUR_LAST_RUN,0);
-}
-
-void bilgeAlarm::endRun()
-{
-    time_t now = time(NULL);
-    int duration = now - m_start_duration;
-    if (duration == 0) duration = 1;
-    LOGU("PUMP OFF(%d) %d secs",run_head,duration);
-    runHistory_t *ptr = &run_history[run_head];
-    ptr->dur = duration;
-    setInt(ID_DUR_LAST_RUN,duration);
-    m_start_duration = 0;
-    if (++run_head >= MAX_RUN_HISTORY)
-        run_head = 0;
-}
-
-
-int bilgeAlarm::countRuns(int type)
-    // note that this does NOT count the current run which is happening
-    // it only counts fully commited runs, so per_day and per_hour alarms
-    // happen when the pump turns OFF.   Due to the alarm clearing strategy,
-    // the and week counts shown after a clear will more or less be zeroed,
-    // though the history still contains all the runs.
-{
-    // LOGD("countRuns(%d) run_head=%d",hours,run_head);
-    // can't really debug in here since it is called every second
-
-    uint32_t cutoff;
-    time_t now = time(NULL);
-
-    if (type == COUNT_WEEK)
-    {
-        cutoff = now - (TEST_TIMES ? (5 * 60) : (7 * 24 * 60 * 60));
-    }
-    else if (type == COUNT_DAY)
-    {
-        cutoff = now - (TEST_TIMES ? (3 * 60) : (24 * 60 * 60));
-        if (m_clear_day_time > cutoff)
-            cutoff = m_clear_day_time;
-    }
-    else // type == COUNT_HOUR
-    {
-        cutoff = now - (TEST_TIMES ? (1 * 60) : (60 * 60));
-        if (m_clear_hour_time > cutoff)
-            cutoff = m_clear_hour_time;
-    }
-
-    int count = 0;
-    int head = run_head - 1;
-    if (head < 0)
-        head = MAX_RUN_HISTORY-1;
-    runHistory_t *ptr = &run_history[head];
-
-    while (ptr->tm && ptr->tm >= cutoff)
-    {
-        count++;
-        // LOGD("    Counting run(%d) at %s",count,timeToString(ptr->tm).c_str());
-        head--;
-        if (head < 0)
-            head = MAX_RUN_HISTORY-1;
-        if (head == run_head)
-            break;
-        ptr = &run_history[head];
-    }
-
-    // LOGD("countRuns(%d) returning %d",hours,count);
-    return count;
-}
-
-
-static time_t countBackRuns(int num)
-{
-    #if DEBUG_COUNTS
-        LOGD("countBackRuns(%d)",num);
-    #endif
-
-    int count = 0;
-    int head = run_head - 1;
-    if (head < 0)
-        head = MAX_RUN_HISTORY-1;
-    runHistory_t *ptr = &run_history[head];
-
-    // so if the error is set to 4 per hour, we want to return the
-    // time of the 4th one back
-
-    while (ptr->tm)
-    {
-        count++;
-        if (count == num)
-        {
-            #if DEBUG_COUNTS
-                LOGD("    countBackRuns(%d) returning(%d) at %s",num,count,timeToString(ptr->tm).c_str());
-            #endif
-            return ptr->tm;
-        }
-
-        #if DEBUG_COUNTS
-            LOGD("    countBackRuns(%d) skipping(%d) at %s",num,count,timeToString(ptr->tm).c_str());
-        #endif
-
-        head--;
-        if (head < 0)
-            head = MAX_RUN_HISTORY-1;
-        if (head == run_head)
-            break;
-        ptr = &run_history[head];
-    }
-
-    // should never get here, since the history just triggered an error
-
-    return 0;
-}
-
-
-// might be a stack overflow
-// building this on the stack
-
-static String historyHTML()
-{
-    String rslt = "<head>\n";
-    rslt += "<title>";
-    rslt += bilge_alarm->getName();
-    rslt += " History</title>\n";
-    rslt += "<body>\n";
-    rslt += "<style>\n";
-    rslt += "th, td { padding-left: 12px; padding-right: 12px; }\n";
-    rslt += "</style>\n";
-
-    // this loop should be abstracted
-
-    int head = run_head - 1;
-    if (head < 0)
-        head = MAX_RUN_HISTORY-1;
-    runHistory_t *ptr = &run_history[head];
-    int count = 0;
-
-    while (ptr->tm)
-    {
-        count++;
-        if (count == 1)
-        {
-            rslt += "<b>";
-            rslt +=  bilge_alarm->getName();
-            rslt += " History</b><br><br>\n";
-            rslt += "<table border='1' padding='6' style='border-collapse:collapse'>\n";
-            rslt += "<tr><th>num</th><th>time</th><th>dur</th><th>ago</th></tr>\n";
-        }
-
-        rslt += "<tr><td>";
-        rslt += String(count);
-        rslt += "  (";
-        rslt += String(head);
-        rslt += ")";
-        rslt += "</td><td>";
-        rslt += timeToString(ptr->tm);
-        rslt += "</td><td align='center'>";
-        rslt += String(ptr->dur);
-        rslt += "</td><td>";
-
-        // anything over a 5 years year is considered invalid to deal with potential lack of clock issues
-
-        char buf[128] = "&nbsp;";
-        uint32_t since = time(NULL) - ptr->tm;
-        if (since < 5 * 365 * 24 * 60 * 60)
-        {
-            int days = since / (24 * 60 * 60);
-            int hours = (since % (24 * 60 * 60)) / (60 * 60);
-            int minutes = (since % (24 * 60 * 60 * 60)) / 60;
-            int secs = since % 60;
-            if (days)
-            {
-                sprintf(buf,"%d days  %02d:%02d:%02d",days, hours, minutes, secs);
-            }
-            else
-            {
-                sprintf(buf,"%02d:%02d:%02d",hours, minutes, secs);
-            }
-        }
-        rslt += buf;
-        rslt += "</td></tr>\n";
-
-        head--;
-        if (head < 0)
-            head = MAX_RUN_HISTORY-1;
-        if (head == run_head)
-            break;
-        ptr = &run_history[head];
-    }
-
-    if (!count)
-        rslt += "THERE IS NO HISTORY OF PUMP RUNS AT THIS TIME\n";
-    else
-        rslt += "</table>";
-
-    rslt += "</body>\n";
-    return rslt;
-}
-
-
-
-String bilgeAlarm::onCustomLink(const String &path)
-{
-    if (path.startsWith("getHistory"))
-    {
-        return historyHTML();
-    }
-    return "";
-}
 
 
 //------------------------------------
-// methods
+// state setters
 //------------------------------------
-
-void bilgeAlarm::suppressAlarm()
-{
-    LOGU("suppressAlarm()");
-    setAlarmState(_alarm_state | ALARM_STATE_SUPPRESSED);
-}
-
-
-void bilgeAlarm::clearError()
-{
-    LOGU("clearError()");
-    if (_alarm_state)
-    {
-        setAlarmState(0);
-
-        // when we clear either of these errors, we set the time window
-        // so that the count goes down to ONE UNDER the error limit,
-        // to prevent false retriggers, but allow the next pump run
-        // to re-trigger the error.  Changing the error parameters,
-        // clearing the history, and disabling the alarm are other
-        // user strategies to cope with pesky count alarms.
-        //
-        // hopefully the count will roll off before the pump goes back on
-
-        if (_state & STATE_TOO_OFTEN_HOUR)
-        {
-            m_clear_hour_time = countBackRuns(_err_per_hour - 1);
-            LOGU("Setting m_clear_hour_time to %s",timeToString(m_clear_hour_time));
-        }
-        if (_state & STATE_TOO_OFTEN_DAY)
-        {
-            m_clear_day_time = countBackRuns(_err_per_day - 1);
-            LOGU("Setting m_clear_day_time to %s",timeToString(m_clear_day_time));
-        }
-
-        setState(0);
-
-        // we manually force the relay off in case it is on
-
-        digitalWrite(PIN_RELAY,0);
-    }
-}
-
-
-void bilgeAlarm::clearHistory()
-{
-    LOGU("clearHistory()");
-    clearError();
-    memset(run_history,0,MAX_RUN_HISTORY * sizeof(runHistory_t));
-    run_head = 0;
-}
-
-
 
 #if DEBUG_STATES
     static String stateString(uint32_t state, enumValue *ptr)
@@ -650,7 +327,6 @@ void bilgeAlarm::clearHistory()
 #endif
 
 
-
 void bilgeAlarm::setState(uint32_t state)
 {
     bilge_alarm->setBenum(ID_STATE,state);
@@ -665,86 +341,58 @@ void bilgeAlarm::setAlarmState(uint32_t state)
 }
 
 
-void bilgeAlarm::onValueChanged(const myIOTValue *value)
+//---------------------------------------
+// commands
+//---------------------------------------
+// called from UI and myIOTValue.cpp invoke() via registered fxn
+
+
+void bilgeAlarm::suppressAlarm()
 {
-    ba_screen->onValueChanged(value);
+    LOGU("suppressAlarm()");
+    setAlarmState(_alarm_state | ALARM_STATE_SUPPRESSED);
+}
+
+void bilgeAlarm::clearHistory()
+{
+    LOGU("clearHistory()");
+    clearError();
+    clearRuns();
 }
 
 
-//------------------------------------
-// alarmTask
-//------------------------------------
-
-#define CHIRP_TIME              30
-#define NUM_CRITICAL_CHIRPS     5
-#define TIME_BETWEEN_CHIRPS     300
-#define TIME_BETWEEN_ALARMS     9000        // to be parameterized
-
-
-static void chirp()
+void bilgeAlarm::clearError()
 {
-    digitalWrite(PIN_ALARM,1);
-    delay(CHIRP_TIME);
-    digitalWrite(PIN_ALARM,0);
-}
-
-
-void bilgeAlarm::alarmTask(void *param)
-    // !DEBUG_ALARMS == very small task stack!!
-    // Be sure to bracket LOG calls in #if DEBUG_ALARMS
-{
-    delay(3000);
-
-    static bool alarm_on = false;
-    static uint32_t alarm_time = 0;
-    static uint32_t last_alarm_state = 0;
-
-    while (1)
+    LOGU("clearError()");
+    if (_alarm_state)
     {
-        vTaskDelay(1);
-        uint32_t now = millis();
-        if (last_alarm_state != _alarm_state)
-        {
-            #if DEBUG_ALARMS
-                LOGD("alarm_state_changed to 0x%02x",_alarm_state);
-            #endif
+        setAlarmState(0);
 
-            last_alarm_state = _alarm_state;
+        // when we clear either of these errors, we set the time window
+        // so that the count goes down to ONE UNDER the error limit,
+        // to prevent false retriggers, but allow the next pump run
+        // to re-trigger the error.  Changing the error parameters,
+        // clearing the history, and disabling the alarm are other
+        // user strategies to cope with pesky count alarms.
+        //
+        // hopefully the count will roll off before the pump goes back on
 
-            alarm_time = 0;
-            alarm_on =
-                (_alarm_state & ALARM_STATE_ANY) &&
-                !(_alarm_state & ALARM_STATE_SUPPRESSED);
+        if (_state & STATE_TOO_OFTEN_HOUR)
+            setRunWindow(COUNT_HOUR,_err_per_hour - 1);
+        if (_state & STATE_TOO_OFTEN_DAY)
+            setRunWindow(COUNT_DAY,_err_per_day - 1);
 
-            if (!alarm_on)
-                digitalWrite(PIN_ALARM,0);
-            else if (_alarm_state & ALARM_STATE_EMERGENCY)
-                digitalWrite(PIN_ALARM,alarm_on);
-        }
-        else if (alarm_on &&
-            _alarm_state < ALARM_STATE_EMERGENCY &&
-            now > alarm_time + TIME_BETWEEN_ALARMS)
-        {
-            alarm_time = now;
-            if (_alarm_state & ALARM_STATE_CRITICAL)
-            {
-                for (int i=0; i<NUM_CRITICAL_CHIRPS; i++)
-                {
-                    chirp();
-                    delay(TIME_BETWEEN_CHIRPS);
-                }
-            }
-            else
-            {
-                chirp();
-            }
-        }
-    }   // while (1)
+        setState(0);
+
+        // we manually force the relay off in case it is on
+
+        digitalWrite(PIN_RELAY,0);
+    }
 }
 
 
 //---------------------------------------------------
-// buttons and other hardware
+// "on" handlers
 //---------------------------------------------------
 
 #if HAS_LCD_LINE_VALUES
@@ -770,7 +418,27 @@ void bilgeAlarm::alarmTask(void *param)
 #endif
 
 
+
+void bilgeAlarm::onValueChanged(const myIOTValue *value)
+    // called from myIOTValue.cpp::publish();
+{
+    ui_screen->onValueChanged(value);
+}
+
+
+String bilgeAlarm::onCustomLink(const String &path)
+    // called from myIOTHTTP.cpp::handleRequest()
+{
+    if (path.startsWith("getHistory"))
+    {
+        return historyHTML();
+    }
+    return "";
+}
+
+
 void bilgeAlarm::onDisabled(const myIOTValue *value, bool val)
+    // called from myIOTValue.cpp setBool() via registered fxn
 {
     LOGU("onDisabled(%d)",val);
     if (val)
@@ -785,14 +453,8 @@ void bilgeAlarm::onDisabled(const myIOTValue *value, bool val)
 }
 
 
-
-
-//-------------------------------------------------------
-// STATE MACHINE (handleSensors() and onForceRelay()
-//-------------------------------------------------------
-
-
 void bilgeAlarm::onForceRelay(const myIOTValue *value, bool val)
+    // called from myIOTValue.cpp setBool() via registered fxn
 {
     LOGD("onForceRelay(%d)",val);
     uint32_t new_state = _state;
@@ -820,7 +482,11 @@ void bilgeAlarm::onForceRelay(const myIOTValue *value, bool val)
 
 
 
-void bilgeAlarm::handleSensors()
+//-------------------------------------------------------
+// THE STATE MACHINE - stateMachine()
+//-------------------------------------------------------
+
+void bilgeAlarm::stateMachine()
     // THIS IS THE STATE MACHINE FOR THE BILGE ALARM
     // There is an issue that we don't want to publish to WS or MQTT in the middle of time,
     // but I am going to ignore that for now and may eventually implement an asynchronous
@@ -891,46 +557,18 @@ void bilgeAlarm::handleSensors()
     // PUMP1
     //-----------------------------
 
-    bool pump1_turned_on = false;
-
     if (was_on1 != pump1_on && now > m_pump1_debounce_time)
     {
         LOGI("m_pump1_on=%d",pump1_on);
         m_pump1_debounce_time = now + _pump_debounce;
-        pump1_turned_on = pump1_on;
-
-        static bool count_this_run = 0;
 
         if (pump1_on)
         {
             new_state |= STATE_PUMP1_ON;
-
-            // ok, the tricky part
-            // we definitely don't want to do a 'run' if it was forced_on.
-            // if the relay is on for extra_time, that implies it went on already once,
-            //    but we don't want to count the second run.
-            // and, by rights, it's probably ok to NOT count the run if it's due to
-            //    run_emergency.
-            // so, we don't want to start a run here if the relay is on.
-
-            if (!(new_state & STATE_RELAY_ON))
-            {
-                count_this_run = 1;
-                bilge_alarm->startRun();
-            }
         }
         else
         {
-            // and we only want to end a run if we started one.
-            // the tricky case is when the relay goes off but the pump stays on.
-            // what we are going to do is we will only end the run IFF we started it.
-
             new_state &= ~STATE_PUMP1_ON;
-            if (count_this_run)
-            {
-                count_this_run = 0;
-                bilge_alarm->endRun();
-            }
         }
 
         if (!_disabled && !forced_on && !emergency_on && _extra_run_time)
@@ -952,40 +590,70 @@ void bilgeAlarm::handleSensors()
         m_suppress_next_after = 0;
     }
 
+    //---------------------------
+    // Do counts
+    //---------------------------
+    // We count either the normal pump or the emergency pump as runs
+    // We start the count if either pump is on, but not if forced_on,
+    // or if the it's the "extra" pump run after
+    // We complete the run when all pumps turn off.
+    // We separate the setting of flags from the startRun() so that
+    // if the emergency pump comes on during a regular pump run, it
+    // will be counted as an emergency run in the history.
+
+    static bool count_this_run = 0;
+    if (!count_this_run &&
+        (pump2_on ||
+         (pump1_on && (
+          !(new_state & STATE_RELAY_FORCED) ||
+          !((new_state & STATE_RELAY_EXTRA) && _extra_run_mode) ))))
+    {
+        startRun();
+        count_this_run = 1;
+    }
+
+    if (count_this_run && pump2_on)
+        setRunFlags(pump2_on);
+
+    if (count_this_run && !pump1_on && !pump2_on)
+    {
+        endRun();
+        count_this_run = 0;
+    }
+
+    //---------------------------
     // duration based alarms
+    //---------------------------
 
     if (pump1_on)
     {
-        if (m_start_duration)
+        // as long as the relay is on (we are assuming the relay
+        // is connected to the pump switch which we are sampling),
+        // we advance the duration starting time to prevent time
+        // related errors due to the relay itself.
+
+        if (new_state & STATE_RELAY_ON)
+            updateStartDuration();
+
+        // calculate duration that the pump has been on
+
+        uint32_t duration = time_now - getStartDuration();
+
+        // raise duration based alarms
+
+        if (_err_run_time && duration > _err_run_time &&
+            !(new_state & STATE_TOO_LONG))
         {
-            // as long as the relay is on (we are assuming the relay
-            // is connected to the pump switch which we are sampling),
-            // we advance the duration starting time to prevent time
-            // related errors due to the relay itself.
-
-            if (new_state & STATE_RELAY_ON)
-                m_start_duration = time_now;
-
-            // calculate duration that the pump has been on
-
-            uint32_t duration = time_now - m_start_duration;
-
-            // raise duration based alarms
-
-            if (_err_run_time && duration > _err_run_time &&
-                !(new_state & STATE_TOO_LONG))
-            {
-                LOGU("ALARM - PUMP TOO LONG");
-                new_state |= STATE_TOO_LONG;
-                new_alarm_state |= ALARM_STATE_ERROR;
-            }
-            if (_crit_run_time && duration > _crit_run_time &&
-                !(new_state & STATE_CRITICAL_TOO_LONG))
-            {
-                LOGU("ALARM - PUMP CRITICAL TOO LONG");
-                new_state |= STATE_CRITICAL_TOO_LONG;
-                new_alarm_state |= ALARM_STATE_CRITICAL;
-            }
+            LOGU("ALARM - PUMP TOO LONG");
+            new_state |= STATE_TOO_LONG;
+            new_alarm_state |= ALARM_STATE_ERROR;
+        }
+        if (_crit_run_time && duration > _crit_run_time &&
+            !(new_state & STATE_CRITICAL_TOO_LONG))
+        {
+            LOGU("ALARM - PUMP CRITICAL TOO LONG");
+            new_state |= STATE_CRITICAL_TOO_LONG;
+            new_alarm_state |= ALARM_STATE_CRITICAL;
         }
     }
 
@@ -1092,8 +760,8 @@ void bilgeAlarm::handleSensors()
         last_clock_time = time_now;
 
         bool clear_this_error = 0;
-        int count_hour = bilge_alarm->countRuns(COUNT_HOUR);
-        int count_day = bilge_alarm->countRuns(COUNT_DAY);
+        int count_hour = countRuns(COUNT_HOUR);
+        int count_day = countRuns(COUNT_DAY);
         bool only_run_errors =
             !(new_alarm_state & ~(ALARM_STATE_ERROR | ALARM_STATE_SUPPRESSED)) &&
             !(new_state & ~(STATE_TOO_OFTEN_HOUR | STATE_TOO_OFTEN_DAY));
@@ -1102,7 +770,7 @@ void bilgeAlarm::handleSensors()
         {
             setInt(ID_NUM_LAST_HOUR,count_hour);
 
-            #if DEBUG_COUNTS
+            #if DEBUG_RUNS
                 LOGD("count_hour(%d) only(%d) _disabled(%d) _err_per(%d) _num(%d) state(0x%04x) alarm(0x%02x)",
                      count_hour,
                      only_run_errors,
@@ -1135,7 +803,7 @@ void bilgeAlarm::handleSensors()
         {
             setInt(ID_NUM_LAST_DAY,count_day);
 
-            #if DEBUG_COUNTS
+            #if DEBUG_RUNS
                 LOGD("count_day(%d) only(%d) _disabled(%d) _err_per(%d) _num(%d) state(0x%04x) alarm(0x%02x)",
                      count_day,
                      only_run_errors,
@@ -1178,7 +846,7 @@ void bilgeAlarm::handleSensors()
         // not to do with errors, but we use the timer to also update the weekly count
         // EVERY SECOND .. could get slow ...
 
-        int count_week = bilge_alarm->countRuns(COUNT_WEEK);
+        int count_week = countRuns(COUNT_WEEK);
         if (count_week != _num_last_week)
             setInt(ID_NUM_LAST_WEEK,count_week);
     }
@@ -1209,8 +877,8 @@ void bilgeAlarm::loop()
     if (now > check_sensors + _sense_millis)
     {
         check_sensors = now;
-        handleSensors();
+        stateMachine();
     }
 
-    ba_screen->loop();
+    ui_screen->loop();
 }
