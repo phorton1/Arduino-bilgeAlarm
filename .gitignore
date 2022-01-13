@@ -1,1 +1,5 @@
-build/**
+# a bit dangerous as this pattern will ignore any files as well that start with "build"
+# but this is the pattern to elminate a folder and all of it's contents.  if there's a slash
+# the empty folder is included.
+
+build**
