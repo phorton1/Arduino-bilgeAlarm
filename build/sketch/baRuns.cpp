@@ -222,7 +222,7 @@ String historyHTML()
             rslt +=  bilge_alarm->getName();
             rslt += " History</b><br><br>\n";
             rslt += "<table border='1' padding='6' style='border-collapse:collapse'>\n";
-            rslt += "<tr><th>num</th><th>time</th><th>dur</th><th>ago</th></th><th>ago</th></tr>\n";
+            rslt += "<tr><th>num</th><th>time</th><th>dur</th><th>ago</th></th><th>flags</th></tr>\n";
         }
 
         rslt += "<tr><td>";

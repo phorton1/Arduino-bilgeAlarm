@@ -627,36 +627,33 @@ void bilgeAlarm::stateMachine()
 
     if (pump1_on)
     {
-        // if (getStartDuration())
+        // as long as the relay is on (we are assuming the relay
+        // is connected to the pump switch which we are sampling),
+        // we advance the duration starting time to prevent time
+        // related errors due to the relay itself.
+
+        if (new_state & STATE_RELAY_ON)
+            updateStartDuration();
+
+        // calculate duration that the pump has been on
+
+        uint32_t duration = time_now - getStartDuration();
+
+        // raise duration based alarms
+
+        if (_err_run_time && duration > _err_run_time &&
+            !(new_state & STATE_TOO_LONG))
         {
-            // as long as the relay is on (we are assuming the relay
-            // is connected to the pump switch which we are sampling),
-            // we advance the duration starting time to prevent time
-            // related errors due to the relay itself.
-
-            if (new_state & STATE_RELAY_ON)
-                updateStartDuration();
-
-            // calculate duration that the pump has been on
-
-            uint32_t duration = time_now - getStartDuration();
-
-            // raise duration based alarms
-
-            if (_err_run_time && duration > _err_run_time &&
-                !(new_state & STATE_TOO_LONG))
-            {
-                LOGU("ALARM - PUMP TOO LONG");
-                new_state |= STATE_TOO_LONG;
-                new_alarm_state |= ALARM_STATE_ERROR;
-            }
-            if (_crit_run_time && duration > _crit_run_time &&
-                !(new_state & STATE_CRITICAL_TOO_LONG))
-            {
-                LOGU("ALARM - PUMP CRITICAL TOO LONG");
-                new_state |= STATE_CRITICAL_TOO_LONG;
-                new_alarm_state |= ALARM_STATE_CRITICAL;
-            }
+            LOGU("ALARM - PUMP TOO LONG");
+            new_state |= STATE_TOO_LONG;
+            new_alarm_state |= ALARM_STATE_ERROR;
+        }
+        if (_crit_run_time && duration > _crit_run_time &&
+            !(new_state & STATE_CRITICAL_TOO_LONG))
+        {
+            LOGU("ALARM - PUMP CRITICAL TOO LONG");
+            new_state |= STATE_CRITICAL_TOO_LONG;
+            new_alarm_state |= ALARM_STATE_CRITICAL;
         }
     }
 
