@@ -387,8 +387,8 @@ void uiScreen::setScreen(int screen_num)
                 if (flags & STATE_EMERGENCY)                buf = "EMERGENCY";
                 else if (flags & STATE_CRITICAL_TOO_LONG)   buf = "CRIT LONG";
                 else if (flags & STATE_TOO_LONG)            buf = "ERR LONG";
-                else if (flags & STATE_TOO_OFTEN_HOUR)      buf = "ERR NUM/HOUR";
                 else if (flags & STATE_TOO_OFTEN_DAY)       buf = "ERR NUM/DAY";
+                else if (flags & STATE_TOO_OFTEN_HOUR)      buf = "ERR NUM/HOUR";
                 print_lcd(1,n1,buf,hist_ptr->dur);
             }
             break;

@@ -170,6 +170,9 @@ void uiScreen::onValueChanged(const myIOTValue *value, valueStore from)
     if (from == VALUE_STORE_PROG)
         return;
 
+    // PRH - there should be a minimum of 30 seconds for the backlight
+    // so if it turns off you can at least turn it back on
+
     if (!strcmp(id,ID_BACKLIGHT_SECS))
         m_backlight_time = millis();
 
@@ -384,8 +387,8 @@ void uiScreen::setScreen(int screen_num)
                 if (flags & STATE_EMERGENCY)                buf = "EMERGENCY";
                 else if (flags & STATE_CRITICAL_TOO_LONG)   buf = "CRIT LONG";
                 else if (flags & STATE_TOO_LONG)            buf = "ERR LONG";
-                else if (flags & STATE_TOO_OFTEN_HOUR)      buf = "ERR NUM/HOUR";
                 else if (flags & STATE_TOO_OFTEN_DAY)       buf = "ERR NUM/DAY";
+                else if (flags & STATE_TOO_OFTEN_HOUR)      buf = "ERR NUM/HOUR";
                 print_lcd(1,n1,buf,hist_ptr->dur);
             }
             break;
