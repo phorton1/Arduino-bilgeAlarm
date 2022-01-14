@@ -144,11 +144,7 @@
 #define STATE_RELAY_EMERGENCY       0x0200      // the relay is on due to the ID_RUN_EMERGENCY value
 #define STATE_RELAY_EXTRA           0x0400      // the relay is on due to the ID_EXTRA_RUN_TIME value
 
-// reported states (in html history)
-// note that theses DONT overlap with ALARM_STATE_ANY
-// and that they all fit in a uint16
 
-#define STATE_REPORT_ERROR  (STATE_TOO_OFTEN_HOUR | STATE_TOO_OFTEN_DAY | STATE_TOO_LONG | STATE_CRITICAL_TOO_LONG)
 
 typedef struct
     // a structure containing the states used by stateMachine()
@@ -242,11 +238,16 @@ private:
     static void stateTask(void *param);
 
     static void setState(uint32_t state);
+    static void addState(uint32_t state);
+    static void clearState(uint32_t state);
+
     static void setAlarmState(uint32_t alarm_state);
+    static void addAlarmState(uint32_t alarm_state);
+    static void clearAlarmState(uint32_t alarm_state);
 
     static void onForceRelay(const myIOTValue *desc, bool val);
     static void onDisabled(const myIOTValue *desc, bool val);
-    virtual void onValueChanged(const myIOTValue *value) override;
+    virtual void onValueChanged(const myIOTValue *value, valueStore from=VALUE_STORE_PROG) override;
     virtual String onCustomLink(const String &path) override;
 
     #if TEST_VERSION

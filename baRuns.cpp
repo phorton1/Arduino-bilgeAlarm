@@ -67,8 +67,7 @@ void startRun()
 uint32_t endRun()
 {
     time_t now = time(NULL);
-    int duration = now - start_duration;
-    if (duration == 0) duration = 1;
+    int duration = now - start_duration + 1;
     LOGU("PUMP OFF(%d) %d secs",prev_head,duration);
     runHistory_t *ptr = &run_history[prev_head];
     ptr->dur = duration;
@@ -256,9 +255,7 @@ String historyHTML()
 
         rslt += "</td><td align='center'>";
 
-        if (ptr->flags & ALARM_STATE_EMERGENCY) rslt += "EMERGENCY ";
-        if (ptr->flags & ALARM_STATE_CRITICAL) rslt += "CRITICAL ";
-        if (ptr->flags & ALARM_STATE_ERROR) rslt += "ERROR ";
+        if (ptr->flags & STATE_EMERGENCY) rslt += "EMERGENCY ";
         if (ptr->flags & STATE_CRITICAL_TOO_LONG) rslt += "WAY TOO LONG ";
         else if (ptr->flags & STATE_TOO_LONG) rslt += "TOO LONG ";
         if (ptr->flags & STATE_TOO_OFTEN_HOUR) rslt += "TOO OFTEN ";

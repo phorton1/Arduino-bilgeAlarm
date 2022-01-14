@@ -228,7 +228,7 @@ bilgeAlarmState_t bilgeAlarm::m_publish_state;
 bilgeAlarm *bilge_alarm = NULL;
 // iotLCD_UI *my_ui = NULL;
 
-
+static bool count_this_run = 0;
 
 
 //--------------------------------
@@ -312,23 +312,14 @@ void bilgeAlarm::setup()
             mask <<= 1;
             ptr++;
         }
-        return rslt;
+        return rslt == "" ? "NONE" : rslt;
     }
 
-    static void debugState(const char *what, bool *bptr, uint32_t in, uint32_t rslt, enumValue *ptr)
+    static void debugState(const char *what, uint32_t in, uint32_t rslt, enumValue *ptr)
     {
-        String bval = "";
-        if (bptr)
-        {
-            bval = *bptr;
-            bval += ",";
-        }
-        LOGD("%s(%s0x%08x:%s)  ==> 0x%08x:%s",
+        LOGD("%s(%s) => %s",
             what,
-            bval,
-            in,
             stateString(in,ptr).c_str(),
-            rslt,
             stateString(rslt,ptr).c_str());
     }
 #else
@@ -338,18 +329,36 @@ void bilgeAlarm::setup()
 
 void bilgeAlarm::setState(uint32_t state)
 {
-    debugState("setState",NULL,state,_state,systemStates);
     _state = state;
-    // bilge_alarm->setBenum(ID_STATE,state);
+    debugState("setState",state,_state,systemStates);
 }
-
+void bilgeAlarm::addState(uint32_t state)
+{
+    _state |= state;
+    debugState("addState",state,_state,systemStates);
+}
+void bilgeAlarm::clearState(uint32_t state)
+{
+    _state &= ~state;
+    debugState("clearState",state,_state,systemStates);
+}
 
 void bilgeAlarm::setAlarmState(uint32_t alarm_state)
 {
-    debugState("setAlarmState",NULL,alarm_state,_alarm_state,alarmStates);
     _alarm_state = alarm_state;
-    // bilge_alarm->setBenum(ID_ALARM_STATE,state);
+    debugState("setAlarmState",alarm_state,_alarm_state,alarmStates);
 }
+void bilgeAlarm::addAlarmState(uint32_t alarm_state)
+{
+    _alarm_state |= alarm_state;
+    debugState("addAlarmState",alarm_state,_alarm_state,alarmStates);
+}
+void bilgeAlarm::clearAlarmState(uint32_t alarm_state)
+{
+    _alarm_state &= ~alarm_state;
+    debugState("clearAlarmState",alarm_state,_alarm_state,alarmStates);
+}
+
 
 
 //---------------------------------------
@@ -361,7 +370,7 @@ void bilgeAlarm::setAlarmState(uint32_t alarm_state)
 void bilgeAlarm::suppressAlarm()
 {
     LOGU("suppressAlarm()");
-    setAlarmState(_alarm_state | ALARM_STATE_SUPPRESSED);
+    addAlarmState(ALARM_STATE_SUPPRESSED);
 }
 
 void bilgeAlarm::clearHistory()
@@ -380,8 +389,13 @@ void bilgeAlarm::clearError()
     LOGU("clearError()");
     if (_alarm_state)
     {
-        setAlarmState(0);
+        digitalWrite(PIN_RELAY,0);
 
+        if (count_this_run)
+        {
+            count_this_run = 0;
+            endRun();
+        }
         // when we clear either of these errors, we set the time window
         // so that the count goes down to ONE UNDER the error limit,
         // to prevent false retriggers, but allow the next pump run
@@ -396,11 +410,15 @@ void bilgeAlarm::clearError()
         if (_state & STATE_TOO_OFTEN_DAY)
             setRunWindow(COUNT_DAY,_err_per_day - 1);
 
-        setState(0);
-
         // we manually force the relay off in case it is on
 
-        digitalWrite(PIN_RELAY,0);
+
+        setState(0);
+        setAlarmState(0);
+
+        m_pump1_debounce_time = millis() + _relay_debounce;
+        m_pump2_debounce_time = millis() + _relay_debounce;
+
     }
 }
 
@@ -433,10 +451,10 @@ void bilgeAlarm::clearError()
 
 
 
-void bilgeAlarm::onValueChanged(const myIOTValue *value)
+void bilgeAlarm::onValueChanged(const myIOTValue *value, valueStore from)
     // called from myIOTValue.cpp::publish();
 {
-    ui_screen->onValueChanged(value);
+    ui_screen->onValueChanged(value,from);
 }
 
 
@@ -479,19 +497,18 @@ void bilgeAlarm::onForceRelay(const myIOTValue *value, bool val)
     if (val)
     {
         LOGU("FORCE RELAY ON");
-        new_state &= ~(STATE_RELAY_EMERGENCY | STATE_RELAY_EXTRA);
-        new_state |= STATE_RELAY_FORCED | STATE_RELAY_ON;
+        clearState(STATE_RELAY_EMERGENCY | STATE_RELAY_EXTRA);
+        addState(STATE_RELAY_FORCED | STATE_RELAY_ON);
     }
     else
     {
         LOGU("FORCE RELAY OFF");
         m_suppress_next_after = 1;
-        new_state &= ~(STATE_RELAY_FORCED | STATE_RELAY_EMERGENCY | STATE_RELAY_EXTRA | STATE_RELAY_ON);
+        clearState(STATE_RELAY_FORCED | STATE_RELAY_EMERGENCY | STATE_RELAY_EXTRA | STATE_RELAY_ON);
     }
 
     digitalWrite(PIN_RELAY,val);
-    if (new_state != _state)
-        setState(new_state);
+    m_pump1_debounce_time = millis() + _relay_debounce;
 }
 
 
@@ -532,29 +549,35 @@ void bilgeAlarm::stateMachine()
     uint32_t now = millis();
     time_t time_now = time(NULL);
     uint32_t new_state = _state;
-    uint32_t new_alarm_state = _alarm_state;
+    uint32_t _alarm_state = _alarm_state;
 
     bool pump1_on = digitalRead(PIN_PUMP1_ON);
     bool pump2_on = digitalRead(PIN_PUMP2_ON);
-    bool was_on1 = new_state & STATE_PUMP1_ON;
-    bool was_on2 = new_state & STATE_PUMP2_ON;
-    bool forced_on = new_state & STATE_RELAY_FORCED;
-    bool emergency_on = new_state & STATE_RELAY_EMERGENCY;
+    bool was_on1 = _state & STATE_PUMP1_ON;
+    bool was_on2 = _state & STATE_PUMP2_ON;
+    bool pump1_valid = now > m_pump1_debounce_time;
+    bool pump2_valid = now > m_pump2_debounce_time;
+    bool forced_on = _state & STATE_RELAY_FORCED;
+    bool emergency_on = _state & STATE_RELAY_EMERGENCY;
+    bool after_extra = _extra_run_mode && _state & STATE_RELAY_EXTRA;
+
+    static uint32_t subtract_relay;
+
 
     // start the run
 
-    static bool count_this_run = 0;
-    if (!count_this_run &&
-        (pump2_on ||
-         (pump1_on && (
-          !(new_state & STATE_RELAY_FORCED) ||
-          !((new_state & STATE_RELAY_EXTRA) && _extra_run_mode) ))))
+    if (!count_this_run)
     {
-        startRun();
-        _time_last_run = time_now;
-        _since_last_run = (int32_t) time_now;
-        _dur_last_run = 0;
-        count_this_run = 1;
+        if ((pump2_on && pump2_valid) ||
+            (pump1_on && pump1_valid && !forced_on && !after_extra))
+        {
+            subtract_relay = 0;
+            startRun();
+            _time_last_run = time_now;
+            _since_last_run = (int32_t) time_now;
+            _dur_last_run = 0;
+            count_this_run = 1;
+        }
     }
 
     //--------------------------------------
@@ -563,47 +586,51 @@ void bilgeAlarm::stateMachine()
     // pump2 is higher priority - it may turn on the emergency_relay
     // so should be detected first
 
-    if (was_on2 != pump2_on && now > m_pump2_debounce_time)
+    if (pump2_valid && was_on2 != pump2_on)
     {
         LOGI("m_pump2_on=%d",pump2_on);
         m_pump2_debounce_time = now  + _pump_debounce;
 
         if (pump2_on)
         {
-            new_state |= STATE_PUMP2_ON;
-            setRunFlags(ALARM_STATE_EMERGENCY | STATE_EMERGENCY);
+            addState(STATE_PUMP2_ON);
+            setRunFlags(STATE_EMERGENCY);
 
             if (!_disabled)
             {
-                if (!(new_state & STATE_EMERGENCY))
+                addAlarmState(ALARM_STATE_EMERGENCY);
+                if (!(_state & STATE_EMERGENCY))
+                {
+                    addState(STATE_EMERGENCY);
                     LOGU("ALARM - EMERGENCY PUMP ON!!");
-                new_state |= STATE_EMERGENCY;
-                new_alarm_state |= ALARM_STATE_CRITICAL | ALARM_STATE_EMERGENCY;
+                }
+                if (_run_emergency)
+                {
+                    LOGU("EMERGENCY RELAY ON");
+                    clearState(STATE_RELAY_EXTRA | STATE_RELAY_FORCED);
+                    addState(STATE_RELAY_EMERGENCY);
+                    emergency_on = 1;
+                }
             }
         }
         else
         {
-            new_state &= ~STATE_PUMP2_ON;
+            clearState(STATE_PUMP2_ON);
             if (!_disabled)
             {
-                if (!(new_alarm_state & ALARM_STATE_EMERGENCY))
+                if (_alarm_state & ALARM_STATE_EMERGENCY)
+                {
                     LOGU("ALARM - EMERGENCY PUMP OFF - DOWNGRADE TO CRITICAL");
-                new_alarm_state &= ~ALARM_STATE_EMERGENCY;
+                    clearState(ALARM_STATE_EMERGENCY);
+                    addState(ALARM_STATE_CRITICAL);
+                }
             }
-        }
-
-        if (!_disabled && !forced_on && pump2_on &&_run_emergency)
-        {
-            LOGU("EMERGENCY RELAY ON");
-            new_state &= ~STATE_RELAY_EXTRA;
-            new_state |= STATE_RELAY_EMERGENCY;
-            emergency_on = 1;
         }
     }
 
     // extend the emergency relay as long as the pump2 switch is on
 
-    if (pump2_on && emergency_on)
+    if (pump2_valid && pump2_on && emergency_on)
     {
         m_relay_time = now + _run_emergency * 1000;
     }
@@ -613,18 +640,18 @@ void bilgeAlarm::stateMachine()
     // PUMP1
     //-----------------------------
 
-    if (was_on1 != pump1_on && now > m_pump1_debounce_time)
+    if (pump1_valid && was_on1 != pump1_on)
     {
         LOGI("m_pump1_on=%d",pump1_on);
         m_pump1_debounce_time = now + _pump_debounce;
 
         if (pump1_on)
         {
-            new_state |= STATE_PUMP1_ON;
+            addState(STATE_PUMP1_ON);
         }
         else
         {
-            new_state &= ~STATE_PUMP1_ON;
+            clearState(STATE_PUMP1_ON);
         }
 
         if (!_disabled && !forced_on && !emergency_on && _extra_run_time)
@@ -632,15 +659,14 @@ void bilgeAlarm::stateMachine()
             if (pump1_on && !_extra_run_mode)
             {
                 LOGU("EXTRA RELAY ON");
-                new_state |= STATE_RELAY_EXTRA;
+                addState(STATE_RELAY_EXTRA);
             }
             else if (!pump1_on && _extra_run_mode && !m_suppress_next_after)
             {
-                new_state |= STATE_RELAY_EXTRA;
+                addState(STATE_RELAY_EXTRA);
                 m_relay_delay_time = now + _extra_run_delay;
                     // relay will come on after the switch has been off for EXTRA_RUN_DELAY millis
             }
-
         }
 
         m_suppress_next_after = 0;
@@ -651,51 +677,41 @@ void bilgeAlarm::stateMachine()
     // duration based alarms
     //---------------------------
 
-    if (pump1_on)
+    if (count_this_run && pump1_valid && pump1_on)
     {
-        // as long as the relay is on (we are assuming the relay
-        // is connected to the pump switch which we are sampling),
-        // we advance the duration starting time to prevent time
-        // related errors due to the relay itself.
+        // the history reports the actual duration, including the relay on times,
+        // but we only want to give errors based on the time the relay was off.
+        // so we keep a static of any relay that turns on between startRun()
+        // and endRun() and subtract it for this calculation
 
-        if (new_state & STATE_RELAY_ON)
-            updateStartDuration();
+        // calculate duration that the pump has been on by itself
 
-        // calculate duration that the pump has been on
-
-        uint32_t duration = time_now - getStartDuration();
+        int duration = time_now - getStartDuration();
+        duration -= subtract_relay;
 
         // raise duration based alarms
 
         if (_err_run_time && duration > _err_run_time)
         {
-            setRunFlags(ALARM_STATE_ERROR | STATE_TOO_LONG);
-            if (!_disabled && !(new_state & STATE_TOO_LONG))
+            setRunFlags(STATE_TOO_LONG);
+            if (!_disabled && !(_state & STATE_TOO_LONG))
             {
                 LOGU("ALARM - PUMP TOO LONG");
-                new_state |= STATE_TOO_LONG;
-                new_alarm_state |= ALARM_STATE_ERROR;
+                addState(STATE_TOO_LONG);
+                addAlarmState(ALARM_STATE_ERROR);
             }
         }
 
         if (_crit_run_time && duration > _crit_run_time)
         {
-            setRunFlags(ALARM_STATE_CRITICAL | STATE_CRITICAL_TOO_LONG);
-            if (!_disabled && !(new_state & STATE_CRITICAL_TOO_LONG))
+            setRunFlags(STATE_CRITICAL_TOO_LONG);
+            if (!_disabled && !(_state & STATE_CRITICAL_TOO_LONG))
             {
                 LOGU("ALARM - PUMP CRITICAL TOO LONG");
-                new_state |= STATE_CRITICAL_TOO_LONG;
-                new_alarm_state |= ALARM_STATE_CRITICAL;
+                addState(STATE_CRITICAL_TOO_LONG);
+                addAlarmState(ALARM_STATE_CRITICAL);
             }
         }
-    }
-
-    // end the run
-
-    if (count_this_run && !pump1_on && !pump2_on)
-    {
-        _dur_last_run = endRun();
-        count_this_run = 0;
     }
 
     //------------------------------------
@@ -705,11 +721,11 @@ void bilgeAlarm::stateMachine()
     if (!_disabled && !forced_on)
     {
         static uint32_t last_relay_state = 0;
-        uint32_t relay_state = new_state & (
+        uint32_t relay_state = _state & (
             STATE_RELAY_EMERGENCY |
             STATE_RELAY_EXTRA);
-        bool extra_on = new_state & STATE_RELAY_EXTRA;
-        bool emergency_on = new_state & STATE_RELAY_EMERGENCY;
+        bool extra_on = _state & STATE_RELAY_EXTRA;
+        bool emergency_on = _state & STATE_RELAY_EMERGENCY;
 
         if (last_relay_state != relay_state &&
             now > m_relay_delay_time)
@@ -718,7 +734,7 @@ void bilgeAlarm::stateMachine()
 
             m_relay_time = 0;
 
-            bool is_on = new_state & STATE_RELAY_ON;
+            bool is_on = _state & STATE_RELAY_ON;
             bool should_be_on = relay_state;
             if (is_on != should_be_on)
             {
@@ -727,7 +743,7 @@ void bilgeAlarm::stateMachine()
 
                 if (should_be_on)
                 {
-                    new_state |= STATE_RELAY_ON;
+                    addState(STATE_RELAY_ON);
                     if (m_relay_delay_time)
                         LOGU("DEFERRED EXTRA RELAY ON");
                     m_relay_delay_time = 0;
@@ -739,7 +755,7 @@ void bilgeAlarm::stateMachine()
                 else
                 {
                     LOGU("DISABLED - RELAY_OFF");
-                    new_state &= ~STATE_RELAY_ON;
+                    clearState(STATE_RELAY_ON);
                 }
 
                 // just for good measure I also output a LOGI showing the state change
@@ -753,9 +769,16 @@ void bilgeAlarm::stateMachine()
             if (should_be_on)
             {
                 if (emergency_on && _run_emergency)
+                {
+                    subtract_relay = _run_emergency;
                     m_relay_time = now + _run_emergency * 1000;
+                }
                 if (extra_on &&_extra_run_time)
+                {
+                    if (!_extra_run_mode)
+                        subtract_relay = _extra_run_time;
                     m_relay_time = now + _extra_run_time * 1000;
+                }
             }
             else // turning off, clear relay_time, set specific relay debounce time for pump1 switch
             {
@@ -771,138 +794,125 @@ void bilgeAlarm::stateMachine()
             LOGU("AUTO RELAY_OFF");
             m_relay_time = 0;
             m_suppress_next_after = 1;
-            new_state &= ~(STATE_RELAY_EMERGENCY | STATE_RELAY_EXTRA | STATE_RELAY_ON);
+            clearState(STATE_RELAY_EMERGENCY | STATE_RELAY_EXTRA | STATE_RELAY_ON);
             digitalWrite(PIN_RELAY,0);
+            m_pump1_debounce_time = now + _relay_debounce;
         }
     }
 
     //---------------------------
     // count based alarms
     //---------------------------
-    // NOTE THAT TO PREVENT NEW ALARMS OF THE SAME TYPE ON ROLL OFF OF PREVIOUS TIMES,
-    // which triggers the 'changed' logic below, we set a "window" on countRuns()
-    // per error type when clearing the error, and henceforth the counts for those
-    // specific error types will NOT REFLECT THE ACTUAL COUNT, even though the history
-    // still contains them.
-    //
-    // Otherwise, if the counts remain above the set levels after clearing,
-    // this logic would re-assert the error on a change to the counts
-    // (i.e. when one rolls off) EVEN IF THE PUMP DOESNT GO BACK ON.
 
     static time_t last_clock_time = 0;
     if (time_now != last_clock_time)
     {
         last_clock_time = time_now;
 
-        bool clear_this_error = 0;
         int count_hour = countRuns(COUNT_HOUR);
         int count_day = countRuns(COUNT_DAY);
-        bool only_run_errors =
-            !(new_alarm_state & ~(ALARM_STATE_ERROR | ALARM_STATE_SUPPRESSED)) &&
-            !(new_state & ~(STATE_TOO_OFTEN_HOUR | STATE_TOO_OFTEN_DAY));
+
+        // not to do with errors, but we use the timer to also update the weekly count
+        // EVERY SECOND .. could get slow ...
+
+        _num_last_week = countRuns(COUNT_WEEK);
+
+        // set check_clear if there are only TOO_OFTEN ERRORS
+        // to auto clear them below, and keep another boolean
+        // to see if we should clear the alarm state as well
+
+        #define ANY_OTHER_ALARM (ALARM_STATE_CRITICAL | ALARM_STATE_EMERGENCY)
+        #define ANY_OTHER_ERROR (STATE_EMERGENCY | STATE_TOO_LONG | STATE_CRITICAL_TOO_LONG)
+
+        bool only_error = !(_alarm_state & ANY_OTHER_ALARM);
+        bool only_count = !(_state & ANY_OTHER_ERROR);
+        bool check_clear = only_error && only_count;
+        bool cleared_alarm = 0;
+
+        #if 0
+            if (count_hour != _num_last_hour ||
+                count_day != _num_last_day)
+            {
+                LOGD("count_hour     = %-3d          old=%d         err=%d",count_hour,_num_last_hour,_err_per_hour);
+                LOGD("count_hour     = %-3d          old=%d         err=%d",count_day, _num_last_day, _err_per_day);
+                LOGD("check_clear    = %-3d   only_error=%d  only_count=%d",check_clear,only_error,only_count);
+            }
+        #endif
 
         if (count_hour != _num_last_hour)
         {
             _num_last_hour = count_hour;
 
-            #if DEBUG_RUNS
-                LOGD("count_hour(%d) only(%d) _disabled(%d) _err_per(%d) _num(%d) state(0x%04x) alarm(0x%02x)",
-                     count_hour,
-                     only_run_errors,
-                     _disabled,
-                     _err_per_hour,
-                     _num_last_hour,
-                     new_state,
-                     new_alarm_state);
-            #endif
-
             if (_err_per_hour && _num_last_hour >= _err_per_hour)
             {
-                setRunFlags(ALARM_STATE_ERROR | STATE_TOO_OFTEN_HOUR);
+                setRunFlags(STATE_TOO_OFTEN_HOUR);
 
-                if (!_disabled &&
-                    !(new_state & STATE_TOO_OFTEN_HOUR))
+                if (!_disabled)
                 {
                     LOGU("ALARM - TOO MANY PER HOUR");
-                    new_state |= STATE_TOO_OFTEN_HOUR;
-                    new_alarm_state |= ALARM_STATE_ERROR;
+                    addState(STATE_TOO_OFTEN_HOUR);
+                    addAlarmState(ALARM_STATE_ERROR);
                 }
             }
-            else if (only_run_errors &&
-                     (new_state & STATE_TOO_OFTEN_HOUR) &&
+            else if (check_clear &&
+                     (_state & STATE_TOO_OFTEN_HOUR) &&
                      _num_last_hour < _err_per_hour)
             {
                 LOGU("ALARM - SELF CLEARING TOO MANY PER HOUR");
-                new_state &= ~STATE_TOO_OFTEN_HOUR;
-                clear_this_error = 1;
+                clearState(STATE_TOO_OFTEN_HOUR);
+                cleared_alarm = 1;
             }
         }
+
         if (count_day != _num_last_day)
         {
             _num_last_day = count_day;
 
-            #if DEBUG_RUNS
-                LOGD("count_day(%d) only(%d) _disabled(%d) _err_per(%d) _num(%d) state(0x%04x) alarm(0x%02x)",
-                     count_day,
-                     only_run_errors,
-                     _disabled,
-                     _err_per_day,
-                     _num_last_day,
-                     new_state,
-                     new_alarm_state);
-            #endif
-
             if (_err_per_day && _num_last_day >= _err_per_day)
             {
-                setRunFlags(ALARM_STATE_ERROR | STATE_TOO_OFTEN_DAY);
+                setRunFlags(STATE_TOO_OFTEN_DAY);
 
-                if (!_disabled &&
-                    !(new_state & STATE_TOO_OFTEN_DAY))
+                if (!_disabled)
                 {
                     LOGU("ALARM - TOO MANY PER DAY");
-                    new_state |= STATE_TOO_OFTEN_DAY;
-                    new_alarm_state |= ALARM_STATE_ERROR;
+                    addState(STATE_TOO_OFTEN_DAY);
+                    addAlarmState(ALARM_STATE_ERROR);
                 }
             }
-            else if (only_run_errors &&
-                     (new_state & STATE_TOO_OFTEN_DAY) &&
+            else if (check_clear &&
+                     (_state & STATE_TOO_OFTEN_DAY) &&
                      _num_last_day < _err_per_day)
             {
                 LOGU("ALARM - SELF CLEARING TOO MANY PER DAY");
-                new_state &= ~STATE_TOO_OFTEN_DAY;
-                clear_this_error = 1;
+                clearState(STATE_TOO_OFTEN_DAY);
+                cleared_alarm = 1;
             }
         }
 
-        if (clear_this_error &&
-            only_run_errors &&
-            new_alarm_state &&
-            !new_state)
+        // if we cleared at least one, check if there's any count errors left
+        // and if not clear the error state
+
+        #define OFTEN_ERRORS (STATE_TOO_OFTEN_HOUR | STATE_TOO_OFTEN_DAY)
+
+        if (cleared_alarm && !(_state & OFTEN_ERRORS))
         {
-            LOGU("ALARM - SELF CLEARING ALARM_STATE_COUNT");
+            LOGU("ALARM - SELF CLEARING ALARM_STATE");
             clearError();
-            new_alarm_state = _alarm_state;
-            new_state = _state;
         }
 
-        // not to do with errors, but we use the timer to also update the weekly count
-        // EVERY SECOND .. could get slow ...
+    }   // every second
 
-        int count_week = countRuns(COUNT_WEEK);
-        if (count_week != _num_last_week)
-            _num_last_week = count_week;
+
+    // end the run
+
+    if (count_this_run && pump1_valid && pump2_valid && !pump1_on && !pump2_on)
+    {
+        _dur_last_run = endRun();
+        count_this_run = 0;
+        subtract_relay = 0;
     }
 
-    //------------------------------
-    // finished
-    //------------------------------
-
-    if (new_state != _state)
-        setState(new_state);
-    if (new_alarm_state != _alarm_state)
-        setAlarmState(new_alarm_state);
-
-}   // handleSensors()
+}   // stateMachine()
 
 
 

@@ -4,6 +4,7 @@
 
 #include "uiScreen.h"
 #include "uiButtons.h"
+#include "baExterns.h"
 #include <myIOTLog.h>
 #include <LiquidCrystal_I2C.h>
 
@@ -45,12 +46,14 @@
 //     The middle and right buttons are decrement and increment for values
 // In commands that require a confirm,
 //     The right button is YES, and the middle button is NO
-// A click of the middle button while in MAIN_MODE toggles to STATS mode
-//     In stats mode, the right button decrements screens
+// A click of the middle button while in MAIN_MODE goes to HISTORY mode
+//     the middle button (continued) increments screens
+//     the right button decrements screens
+//     the left button returns to MAIN mode
 
 
 #define MENU_MODE_MAIN      0     // main mode - main screen and commands
-#define MENU_MODE_STATS     1     // stats mode - cycle through history if any
+#define MENU_MODE_HISTORY   1     // stats mode - cycle through history if any
 #define MENU_MODE_CONFIG    2     // config mode - modify config options
 
 
@@ -68,10 +71,10 @@
 
 #define SCREEN_CONFIRM          10
 
-#define SCREEN_CONFIG_BASE      11
-#define SCREEN_STATS_BASE       12
+#define SCREEN_HISTORY_BASE     11
+#define SCREEN_HISTORY          12
 
-
+#define SCREEN_CONFIG_BASE      13
 
 const char *screens[] = {
 
@@ -89,8 +92,11 @@ const char *screens[] = {
 
     "CONFIRM",              "%S",                   // 10
 
-    "CONFIG",               "BASE",                 // 11
-    "STATS",                "NEXT        PREV",     // 12
+    "HISTORY %8d",          "BACK  NEXT  PREV",     // 11
+    "%s",                   "%-12s %3d",             // 12
+
+    "CONFIG",               "BASE",                 // 13
+
 };
 
 
@@ -99,6 +105,10 @@ uiScreen *ui_screen = NULL;
 uiButtons *ui_buttons = NULL;
 LiquidCrystal_I2C lcd(0x27,LCD_LINE_LEN,2);   // 20,4);
     // set the LCD address to 0x27 for a 16 chars and 2 line display
+
+static int hist_iter;
+runHistory_t *hist_ptr;
+
 
 
 uiScreen::uiScreen(int *button_pins)
@@ -121,6 +131,7 @@ uiScreen::uiScreen(int *button_pins)
     lcd.print(0,bilgeAlarm::getDeviceType());
     lcd.setCursor(0,1);
     lcd.print(bilgeAlarm::getVersion());
+    backlight(1);
 }
 
 
@@ -151,18 +162,29 @@ static const char *alarmStateName(uint32_t alarm_state)
     return "NONE";
 }
 
-void uiScreen::onValueChanged(const myIOTValue *value)
+void uiScreen::onValueChanged(const myIOTValue *value, valueStore from)
 {
     bool needs_draw = false;
+    const char *id = value->getId();
+
+    if (from == VALUE_STORE_PROG)
+        return;
+
+    // PRH - there should be a minimum of 30 seconds for the backlight
+    // so if it turns off you can at least turn it back on
+
+    if (!strcmp(id,ID_BACKLIGHT_SECS))
+        m_backlight_time = millis();
+
     switch (m_screen_num)
     {
         case SCREEN_MAIN:
             needs_draw =
-                !strcmp(value->getId(),ID_STATE) ||
-                !strcmp(value->getId(),ID_SINCE_LAST_RUN) ||
-                !strcmp(value->getId(),ID_NUM_LAST_DAY) ||
-                !strcmp(value->getId(),ID_NUM_LAST_HOUR) ||
-                !strcmp(value->getId(),ID_NUM_LAST_WEEK);
+                !strcmp(id,ID_STATE) ||
+                !strcmp(id,ID_SINCE_LAST_RUN) ||
+                !strcmp(id,ID_NUM_LAST_DAY) ||
+                !strcmp(id,ID_NUM_LAST_HOUR) ||
+                !strcmp(id,ID_NUM_LAST_WEEK);
             break;
     }
     if (needs_draw)
@@ -227,14 +249,14 @@ void uiScreen::setScreen(int screen_num)
         m_screen_num = screen_num;
     }
 
-    if (screen_num >= SCREEN_STATS_BASE)
-    {
-        m_menu_mode = MENU_MODE_STATS;
-        ui_buttons->setRepeatMask(3);
-    }
-    else if (screen_num >= SCREEN_CONFIG_BASE)
+    if (screen_num >= SCREEN_CONFIG_BASE)
     {
         m_menu_mode = MENU_MODE_CONFIG;
+        ui_buttons->setRepeatMask(6);
+    }
+    else if (screen_num >= SCREEN_HISTORY_BASE)
+    {
+        m_menu_mode = MENU_MODE_HISTORY;
         ui_buttons->setRepeatMask(6);
     }
     else
@@ -243,9 +265,11 @@ void uiScreen::setScreen(int screen_num)
         ui_buttons->setRepeatMask(0);
     }
 
-
     uint32_t state = bilgeAlarm::getState();
     uint32_t alarm_state = bilgeAlarm::getAlarmState();
+
+    if (alarm_state)
+        ui_buttons->setRepeatMask(0);
 
     int n0 = m_screen_num * 2;
     int n1 = m_screen_num * 2 + 1;
@@ -342,7 +366,35 @@ void uiScreen::setScreen(int screen_num)
             break;
         }
 
-        // PREFS
+        // HISTORY
+
+        case SCREEN_HISTORY_BASE:
+            print_lcd(0,n0,countRuns(COUNT_ALL));
+            print_lcd(1,n1);
+            initRunIterator(&hist_iter);
+            break;
+        case SCREEN_HISTORY:
+            if (hist_ptr)
+            {
+                String dte = timeToString(hist_ptr->tm);
+                const char *str = &(dte.c_str())[5];
+                print_lcd(0,n0,str);
+
+                // prioritized string
+
+                const char *buf = "";
+                uint16_t flags = hist_ptr->flags;
+                if (flags & STATE_EMERGENCY)                buf = "EMERGENCY";
+                else if (flags & STATE_CRITICAL_TOO_LONG)   buf = "CRIT LONG";
+                else if (flags & STATE_TOO_LONG)            buf = "ERR LONG";
+                else if (flags & STATE_TOO_OFTEN_HOUR)      buf = "ERR NUM/HOUR";
+                else if (flags & STATE_TOO_OFTEN_DAY)       buf = "ERR NUM/DAY";
+                print_lcd(1,n1,buf,hist_ptr->dur);
+            }
+            break;
+
+
+        // DEFAULT
 
         default:
         {
@@ -365,6 +417,9 @@ void uiScreen::loop()
         m_started = true;
         setScreen(SCREEN_MAIN);
     }
+
+    if (!m_backlight && !bilge_alarm->getInt(ID_BACKLIGHT_SECS))
+        backlight(1);
 
     uint32_t now = millis();
     if (now > m_last_time + REFRESH_MILLIS)
@@ -558,16 +613,18 @@ bool uiScreen::onButton(int button_num, int event_type)
                     setScreen(SCREEN_MAIN);
                 else
                     setScreen(m_screen_num+1);
+                return true;
             }
         }
-        else if (event_type == BUTTON_TYPE_CLICK)
+        else // if (event_type == BUTTON_TYPE_CLICK)
         {
             if (button_num == 1)
             {
                 if (m_screen_num == SCREEN_CONFIRM)
                     setScreen(m_prev_screen);
                 else
-                    setScreen(SCREEN_STATS_BASE);
+                    setScreen(SCREEN_HISTORY_BASE);
+                return true;
             }
             else if (button_num == 2)
             {
@@ -598,6 +655,7 @@ bool uiScreen::onButton(int button_num, int event_type)
                         setScreen(SCREEN_MAIN);
                         break;
                 }
+                return true;
             }
         }
     }
@@ -606,12 +664,27 @@ bool uiScreen::onButton(int button_num, int event_type)
     // STATS
     //-----------------------------------
 
-    else if (m_menu_mode == MENU_MODE_STATS)
+    else if (m_menu_mode == MENU_MODE_HISTORY)
     {
-        if (button_num == 1)
+        if (button_num == 0 )
         {
             setScreen(SCREEN_MAIN);
         }
+        else if (button_num == 1)
+        {
+            hist_ptr = getNextRun(&hist_iter);
+            if (hist_ptr)
+                setScreen(SCREEN_HISTORY);
+        }
+        else if (button_num == 2)
+        {
+            hist_ptr = getPrevRun(&hist_iter);
+            if (hist_ptr)
+                setScreen(SCREEN_HISTORY);
+            else
+                setScreen(SCREEN_HISTORY_BASE);
+        }
+        return true;
     }
 
     //---------------------------
@@ -625,9 +698,11 @@ bool uiScreen::onButton(int button_num, int event_type)
             if (event_type == BUTTON_TYPE_LONG_CLICK)
             {
                 setScreen(SCREEN_MAIN);
+                return true;
             }
+
         }
     }
 
-    return true;
+    return false;
 }

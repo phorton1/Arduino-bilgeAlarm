@@ -50,7 +50,7 @@ void uiButtons::loop()
         m_poll_time = now;
         for (int i=0; i<NUM_BUTTONS; i++)
         {
-            int mask = 1<<i;
+            uint16_t mask = 1<<i;
             bool was_pressed = m_state & mask ? 1 : 0;
             bool is_pressed = digitalRead(m_pins[i]);
 
@@ -82,7 +82,6 @@ void uiButtons::loop()
             else if (is_pressed)
             {
                 int dif = now - m_time;
-
                 if (mask & m_repeat_mask)
                 {
                     #define START_REPEAT_DELAY   300    // ms

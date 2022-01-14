@@ -233,6 +233,7 @@ C:\src\Arduino\bilgeAlarm\build\sketch\uiScreen.cpp.o: \
  C:\Users\Patrick\AppData\Local\Arduino15\packages\esp32\hardware\esp32\1.0.6/tools/sdk/include/esp32/rom/aes.h \
  C:\Users\Patrick\AppData\Local\Arduino15\packages\esp32\hardware\esp32\1.0.6/tools/sdk/include/mbedtls/mbedtls/error.h \
  C:\src\Arduino\bilgeAlarm\build\sketch\uiButtons.h \
+ C:\src\Arduino\bilgeAlarm\build\sketch\baExterns.h \
  C:\src\Arduino\libraries\my_IOT/myIOTLog.h \
  C:\src\Arduino\libraries\myDebugPrivate/LiquidCrystal_I2C.h \
  C:\Users\Patrick\AppData\Local\Arduino15\packages\esp32\hardware\esp32\1.0.6\libraries\Wire\src/Wire.h \

@@ -22,7 +22,7 @@ class uiScreen
             // return true if the BUTTON_TYPE_PRESS was handled
             // return value ignored otherwise ..
 
-        void onValueChanged(const myIOTValue *value);
+        void onValueChanged(const myIOTValue *value, valueStore from);
             // called from bilgeAlarm/myIOTDevice when any value changes
 
     private:
