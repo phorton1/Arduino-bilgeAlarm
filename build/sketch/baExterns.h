@@ -1,6 +1,8 @@
 //------------------------------------
 // baExterns.h
 //------------------------------------
+#pragma once
+
 // external declarations in various files
 
 extern void startAlarm();
@@ -19,7 +21,7 @@ extern void startAlarm();
     // debugging in bilgeAlarm.cpp and baRuns.cpp
 
 
-#define MAX_RUN_HISTORY    15   // 256      // 256 * 8 = 2K
+#define MAX_RUN_HISTORY    256      // 256 * 8 = 2K
     // set to smaller number (i.e 15) for testing circular buffer
     //
     // circular buffer of run history, where each history element

@@ -198,7 +198,7 @@ String historyHTML()
     String rslt = "<head>\n";
     rslt += "<title>";
     rslt += bilge_alarm->getName();
-    rslt += " History</title>\n";
+    rslt += " History =</title>\n";
     rslt += "<body>\n";
     rslt += "<style>\n";
     rslt += "th, td { padding-left: 12px; padding-right: 12px; }\n";
@@ -215,8 +215,10 @@ String historyHTML()
         if (count == 1)
         {
             rslt += "<b>";
+            rslt += String(countRuns(COUNT_ALL));
+            rslt += " ";
             rslt +=  bilge_alarm->getName();
-            rslt += " History</b><br><br>\n";
+            rslt += " History Items</b><br><br>\n";
             rslt += "<table border='1' padding='6' style='border-collapse:collapse'>\n";
             rslt += "<tr><th>num</th><th>time</th><th>dur</th><th>ago</th></th><th>flags</th></tr>\n";
         }

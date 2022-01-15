@@ -5,6 +5,7 @@
 #pragma once
 
 #include "bilgeAlarm.h"
+#include "baExterns.h"
 
 
 class uiScreen
@@ -39,6 +40,11 @@ class uiScreen
 
         int m_backlight;
         uint32_t m_backlight_time;
+
+        int m_hist_num;
+        int m_hist_iter;
+        runHistory_t *m_hist_ptr;
+
 
         // int m_last_pref_value;
 

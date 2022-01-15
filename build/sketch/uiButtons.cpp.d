@@ -233,4 +233,5 @@ C:\src\Arduino\bilgeAlarm\build\sketch\uiButtons.cpp.o: \
  C:\Users\Patrick\AppData\Local\Arduino15\packages\esp32\hardware\esp32\1.0.6/tools/sdk/include/esp32/hwcrypto/aes.h \
  C:\Users\Patrick\AppData\Local\Arduino15\packages\esp32\hardware\esp32\1.0.6/tools/sdk/include/esp32/rom/aes.h \
  C:\Users\Patrick\AppData\Local\Arduino15\packages\esp32\hardware\esp32\1.0.6/tools/sdk/include/mbedtls/mbedtls/error.h \
+ C:\src\Arduino\bilgeAlarm\build\sketch\baExterns.h \
  C:\src\Arduino\libraries\my_IOT/myIOTLog.h

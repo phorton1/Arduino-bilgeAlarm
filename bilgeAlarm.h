@@ -78,8 +78,9 @@
 
 // configuration
 
-#define ID_DISABLED         "DISABLED"              // enabled,disabled = LEDs still light, but no errors, extra runs, or other functionality will take place
+#define ID_DISABLED         "ALARMS"                // _disabled = enabled,disabled = LEDs still light, but no errors, extra runs, or other functionality will take place
 #define ID_BACKLIGHT_SECS   "BACKLIGHT_SECS"        // off,secs = backlight will turn off if no buttons pressed after this many seconds
+#define ID_MENU_SECS        "MENU_SECS"             // off,secs = will return to the MAIN SCREEN if no buttons pressed after this many seconds
 #define ID_ERR_RUN_TIME     "ERR_RUN_TIME"          // off,secs - pump running this many seconds or more is an "error alarm"
 #define ID_CRIT_RUN_TIME    "CRIT_RUN_TIME"         // off,secs - pump running this many seconds or more is a "critical error alarm"
 #define ID_ERR_PER_HOUR     "ERR_PER_HOUR"          // off,num - pump running more than this many times per hour is an "error alarm"
@@ -199,6 +200,7 @@ private:
 
     static bool _disabled;
     static int  _backlight_secs;
+    static int  _menu_secs;
     static int  _err_run_time;
     static int  _crit_run_time;
     static int  _err_per_hour;

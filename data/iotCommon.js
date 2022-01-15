@@ -6,6 +6,8 @@ var is_server = 0;
 // prh - might be useful to have a watchdog that reloads the page every so often
 
 const debug_alive = 1;
+    // these javascript timers are about 1.6 times faster than advertised on my lenovo with firefox
+    // they are tuned to myIOTserver not timing out (it listens)
 const keep_alive_interval = 15000;      // how often to check keep alive
 const keep_alive_timeout = 5000;        // how long to wait for ping response before considering it dead
 const ws_repoen_delay = 3000;           // how long to wait for re-open (allowing for close) after dead
@@ -39,6 +41,7 @@ const VALUE_STYLE_PASSWORD   = 0x0004;      // displayed as '********', protecte
 const VALUE_STYLE_TIME_SINCE = 0x0008       // ui shows '23 minutes ago' in addition to the time string
 const VALUE_STYLE_VERIFY     = 0x0010;      // UI buttons will display a confirm dialog
 const VALUE_STYLE_LONG       = 0x0020;      // UI will show a long (rather than default 15ish) String Input Control
+const VALUE_STYLE_OFF_ZERO   = 0x0040;      // Allows 0 below min and displays it as "OFF"
 const VALUE_STYLE_RETAIN     = 0x0100;      // MQTT if published, will be "retained"
 
 
@@ -54,6 +57,7 @@ var device_has_sd = 0;
 var device_list;
 var file_request_num = 0;
 var cur_button = 'dashboard_button';
+var alive_timer;
 
 
 function onTab(event)
@@ -66,6 +70,16 @@ function onTab(event)
 //--------------------------------
 // display utilities
 //--------------------------------
+
+
+function myAlert(msg)
+    // cant use alert() cuz it blocks the keep alive stuff
+{
+    $('#alert_msg').html(msg);
+    $('#alert_dlg').modal('show');
+
+    // setTimeout(function() { alert(msg); }, 1);
+}
 
 function fileKB(i)
 {
@@ -214,17 +228,22 @@ function checkAlive()
     if (!web_socket.alive)
     {
         ws_closing = 1;
-        console.log("checkAlive closing web_socket(" + web_socket.my_id + ")");
+        if (debug_alive)
+            console.log("checkAlive closing web_socket(" + web_socket.my_id + ")");
         $('#ws_status2').html("WS(" + web_socket.my_id + ") CLOSING");
         web_socket.close();
-        console.log("checkAlive calling openWebSocket()");
+        if (debug_alive)
+            console.log("checkAlive calling openWebSocket()");
         openWebSocket();
     }
-    else if (debug_alive)
+    else
     {
-        console.log("checkAlive(" + web_socket.my_id + ") ok");
-        setTimeout(keepAlive,keep_alive_interval);
+        if (debug_alive)
+            console.log("checkAlive(" + web_socket.my_id + ") ok");
+        clearTimeout(alive_timer);
+        alive_timer = setTimeout(keepAlive,keep_alive_interval);
     }
+
 }
 
 function keepAlive()
@@ -235,7 +254,8 @@ function keepAlive()
         console.log("keepAlive web_socket(" + web_socket.my_id + ")");
     web_socket.alive = 0;
     sendCommand("ping");
-    setTimeout(checkAlive,keep_alive_timeout);
+    clearTimeout(alive_timer);
+    alive_timer = setTimeout(checkAlive,keep_alive_timeout);
 }
 
 
@@ -300,7 +320,8 @@ function openWebSocket()
             sendCommand("sdcard_list");
         }
         this.alive = 1;
-        setTimeout(keepAlive,keep_alive_interval);
+        clearTimeout(alive_timer);
+        alive_timer = setTimeout(keepAlive,keep_alive_interval);
 
         // sendCommand("get_chart_data");
     };
@@ -318,13 +339,16 @@ function openWebSocket()
 
         if (!ws_open_count)
         {
-            console.log("websocket.onclose setting delayed call to openWebSocket")
-            setTimeout(openWebSocket,ws_repoen_delay);
+            if (debug_alive)
+                console.log("websocket.onclose setting delayed call to openWebSocket")
+            clearTimeout(alive_timer);
+            alive_timer = setTimeout(openWebSocket,ws_repoen_delay);
         }
     };
 
     web_socket.onmessage = handleWS;
 }
+
 
 
 
@@ -340,7 +364,7 @@ function handleWS(ws_event)
         return;
 
     if (obj.error)
-        window.alert("ERROR: " + obj.error);
+        myAlert("ERROR: " + obj.error);
     if (obj.pong)
     {
         web_socket.alive = 1;
@@ -426,7 +450,7 @@ function handleWS(ws_event)
             in_upload = false;
         }
         if (obj.upload_error)
-            alert("There was a server error while uploading");
+            myAlert("There was a server error while uploading");
     }
 
     //--------------------------
@@ -559,8 +583,15 @@ function addInput(item)
         item.type == VALUE_TYPE_FLOAT;
     var input_type =
         (item.style & VALUE_STYLE_PASSWORD) ? 'password' :
-        is_number ? 'number' :
+        is_number ? "number" :   //  && !(item.style & VALUE_STYLE_OFF_ZERO) ? 'number' :
         'text'
+
+    // My modified spinner renders 0 as off for those with class "off_zero"
+    // So we go ahead and morph the value "off" to zero here.
+    // Without the modified spinner "off" is not supported anyways (but 0 works consistently)
+
+    if (item.style & VALUE_STYLE_OFF_ZERO && item.value == "off")
+        item.value = 0;
 
     var input = $('<input>')
         .addClass(item.id)
@@ -572,15 +603,25 @@ function addInput(item)
             onchange : 'onValueChange(event)',
             'data-type' : item.type,
             'data-value' : item.value,
-            'data-style' : item.style
+            'data-style' : item.style,
+            'data-min' : item.min,
         });
 
+    // for OFF_ZERO we set the min to zero, skip during incs/decs,
+    // and enforce it via the data-min in our onchange
+
+    var use_min = item.min;
+    if (item.style & VALUE_STYLE_OFF_ZERO)
+    {
+        use_min = 0;
+        input.addClass('off_zero');
+    }
     if (item.style & VALUE_STYLE_LONG)
         input.attr({size:80});
 
     if (is_number)
         input.attr({
-            min: is_bool ? 0 : item.min,
+            min: is_bool ? 0 : use_min,
             max: is_bool ? 1 : item.max
         })
     if (item.type == VALUE_TYPE_FLOAT)
@@ -670,7 +711,7 @@ function fillTable(values,ids,tbody)
         if (item)
             addItem(tbody,item);
         else
-            alert("Uknown item_id in fillTable " + tbody.id + ": " + id);
+            myAlert("Uknown item_id in fillTable " + tbody.id + ": " + id);
 
     });
 }
@@ -720,6 +761,35 @@ function fillTables(obj)
             $('#dashboard_button').click();
     }
 
+    // change all my numeric inputs to the bootstrap-inner-spinner.js thing
+    // without groupings ... see iotCommon.css
+
+    if(jQuery().inputSpinner)
+    {
+        console.log("Setting up spinner")
+
+        // $("input[data-style=" + VALUE_STYLE_OFF_ZERO + "]")
+        $("input[type='number']")
+            .addClass('my_spinner_input')
+            .attr({
+               'data-digit-grouping':false })
+            .inputSpinner({
+                textAlign : 'left',
+                groupClass : 'my_spinner_div',
+                buttonsWidth : '1rem',
+                buttonsClass : 'btn-outline-secondary my_spinner_btn' });
+    }
+
+    // we reset the value to the data-value here,
+    // after creating the spinner, so that 'off'
+    // will show for zero.
+
+    //$("input[type='number']")
+    //    .attr({
+    //       'data-digit-grouping':false,
+    //       value:$(this).attr('data-value') })
+    //
+    console.log("done finishing up")
 }
 
 
@@ -771,7 +841,7 @@ function onValueChange(evt)
 
     if ((style & VALUE_STYLE_REQUIRED) && String(value)=="")
     {
-        alert("Value must be entered");
+        myAlert("Value must be entered");
         ok = false;
     }
     else if (type == VALUE_TYPE_INT || type == VALUE_TYPE_FLOAT)
@@ -780,25 +850,25 @@ function onValueChange(evt)
         var max = obj.getAttribute('max');
         if (type == VALUE_TYPE_INT)
         {
-            if (!value.match(/^-?\d+$/))
+            if (value != '' && !value.match(/^-?\d+$/))
             {
-                alert("illegal characters in integer: " + value);
+                myAlert("illegal characters in integer: " + value);
                 ok = false;
             }
             value = parseInt(value);
         }
         else if (type == VALUE_TYPE_FLOAT)
         {
-            if (!value.match(/^-?\d*\.?\d+$/))
+            if (value != '' && !value.match(/^-?\d*\.?\d+$/))
             {
-                alert("illegal characters in float: " + value);
+                myAlert("illegal characters in float: " + value);
                 ok = false;
             }
             value = parseFloat(value);
         }
         if (ok && (value < min || value > max))
         {
-            alert(name + "(" + value + ") out of range " + min + "..." + max);
+            myAlert(name + "(" + value + ") out of range " + min + "..." + max);
             ok = false;
         }
     }
@@ -813,8 +883,16 @@ function onValueChange(evt)
     }
     else
     {
-        obj.value = obj.getAttribute('data-value');
-        setTimeout( function() { obj.focus(); }, 1);
+        value = obj.getAttribute('data-value');
+        console.log("resetting value to " + value);
+        // if it's an input spinner call the setValue() method,
+        // as apparently just setting the value whilst editing does not work
+        if (obj.setValue)
+            obj.setValue(value);
+        else
+            obj.value = value;
+        console.log("done resetting value to " + value);
+        setTimeout( function() { obj.focus(); }, 5);
     }
 }
 
@@ -824,7 +902,7 @@ function onChangeDevice(evt)
 {
     var obj = evt.target;
     var value = obj.value;
-    // alert("onDeviceChange(" + value + "");
+    // myAlert("onDeviceChange(" + value + "");
     sendCommand("set_context",{uuid:value});
 }
 

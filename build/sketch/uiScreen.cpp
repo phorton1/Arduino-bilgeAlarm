@@ -4,10 +4,11 @@
 
 #include "uiScreen.h"
 #include "uiButtons.h"
-#include "baExterns.h"
 #include <myIOTLog.h>
 #include <LiquidCrystal_I2C.h>
 
+#define MIN_BACKLIGHT       15
+#define MIN_MENUTIMEOUT     15
 
 #define DEBUG_SCREEN  0
 
@@ -93,7 +94,7 @@ const char *screens[] = {
     "CONFIRM",              "%S",                   // 10
 
     "HISTORY %8d",          "BACK  NEXT  PREV",     // 11
-    "%s",                   "%-12s %3d",             // 12
+    "%s %s",                "%-12s %3d",            // 12
 
     "CONFIG",               "BASE",                 // 13
 
@@ -106,21 +107,28 @@ uiButtons *ui_buttons = NULL;
 LiquidCrystal_I2C lcd(0x27,LCD_LINE_LEN,2);   // 20,4);
     // set the LCD address to 0x27 for a 16 chars and 2 line display
 
-static int hist_iter;
-runHistory_t *hist_ptr;
 
 
 
 uiScreen::uiScreen(int *button_pins)
 {
     m_started = false;
-    m_screen_num = -1;
     m_menu_mode = MENU_MODE_MAIN;
+    m_screen_num = -1;
     m_prev_screen = 0;
-    m_last_time = 0;
 
+    m_last_time = 0;
+    m_last_screen_time = 0;
     m_last_state = 0;
     m_last_since = 0;
+
+
+    m_backlight = 0;
+    m_backlight_time = 0;
+
+    m_hist_num = 0;
+    m_hist_iter =0;
+    m_hist_ptr = NULL;
 
     ui_screen = this;
     ui_buttons = new uiButtons(button_pins);
@@ -369,27 +377,37 @@ void uiScreen::setScreen(int screen_num)
         // HISTORY
 
         case SCREEN_HISTORY_BASE:
+            m_hist_num = 0;
+            m_hist_iter = 0;
+            initRunIterator(&m_hist_iter);
             print_lcd(0,n0,countRuns(COUNT_ALL));
             print_lcd(1,n1);
-            initRunIterator(&hist_iter);
             break;
         case SCREEN_HISTORY:
-            if (hist_ptr)
+            if (m_hist_ptr)
             {
-                String dte = timeToString(hist_ptr->tm);
-                const char *str = &(dte.c_str())[5];
-                print_lcd(0,n0,str);
-
                 // prioritized string
-
-                const char *buf = "";
-                uint16_t flags = hist_ptr->flags;
+                const char *buf = "secs";
+                uint16_t flags = m_hist_ptr->flags;
                 if (flags & STATE_EMERGENCY)                buf = "EMERGENCY";
                 else if (flags & STATE_CRITICAL_TOO_LONG)   buf = "CRIT LONG";
                 else if (flags & STATE_TOO_LONG)            buf = "ERR LONG";
                 else if (flags & STATE_TOO_OFTEN_DAY)       buf = "ERR NUM/DAY";
                 else if (flags & STATE_TOO_OFTEN_HOUR)      buf = "ERR NUM/HOUR";
-                print_lcd(1,n1,buf,hist_ptr->dur);
+
+                char buf1[LCD_BUF_LEN] = "";
+                char buf2[LCD_LINE_LEN] = "";
+
+                struct tm *ts = localtime(&m_hist_ptr->tm);
+                sprintf(buf1,"%d %02d-%02d",m_hist_num,ts->tm_mon+1,ts->tm_mday);
+                bool full_time = LCD_LINE_LEN - strlen(buf1) - 1 >= 8;
+                if (full_time)
+                    sprintf(buf2,"%02d:%02d:%02d",ts->tm_hour,ts->tm_min,ts->tm_sec);
+                else
+                    sprintf(buf2,"%02d:%02d",ts->tm_hour,ts->tm_min);
+
+                print_lcd(0,n0,buf1,buf2);
+                print_lcd(1,n1,buf,m_hist_ptr->dur);
             }
             break;
 
@@ -443,6 +461,7 @@ void uiScreen::loop()
         else if (m_backlight == 1)
         {
             int secs = bilge_alarm->getInt(ID_BACKLIGHT_SECS);
+            if (secs && secs < MIN_BACKLIGHT) secs = MIN_BACKLIGHT;
             if (secs && now > m_backlight_time + secs * 1000)
                 backlight(0);
         }
@@ -672,17 +691,52 @@ bool uiScreen::onButton(int button_num, int event_type)
         }
         else if (button_num == 1)
         {
-            hist_ptr = getNextRun(&hist_iter);
-            if (hist_ptr)
+            m_hist_ptr = getNextRun(&m_hist_iter);
+            if (m_hist_ptr)
+            {
+                m_hist_num++;
                 setScreen(SCREEN_HISTORY);
+            }
+            else
+            {
+                setScreen(SCREEN_HISTORY_BASE);
+            }
         }
         else if (button_num == 2)
         {
-            hist_ptr = getPrevRun(&hist_iter);
-            if (hist_ptr)
-                setScreen(SCREEN_HISTORY);
+            if (m_screen_num == SCREEN_HISTORY_BASE)
+            {
+                m_hist_num = 0;
+                m_hist_iter = 0;
+                int iter;
+                initRunIterator(&iter);
+                runHistory_t *ptr = getNextRun(&iter);
+                while (ptr)
+                {
+                    m_hist_num++;
+                    m_hist_ptr = ptr;
+                    m_hist_iter = iter;
+                    ptr = getNextRun(&iter);
+                }
+
+                if (m_hist_num)
+                    setScreen(SCREEN_HISTORY);
+                else
+                    setScreen(SCREEN_HISTORY_BASE);
+            }
             else
-                setScreen(SCREEN_HISTORY_BASE);
+            {
+                m_hist_ptr = getPrevRun(&m_hist_iter);
+                if (m_hist_ptr)
+                {
+                    m_hist_num--;
+                    setScreen(SCREEN_HISTORY);
+                }
+                else
+                {
+                    setScreen(SCREEN_HISTORY_BASE);
+                }
+            }
         }
         return true;
     }
