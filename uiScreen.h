@@ -39,17 +39,36 @@ class uiScreen
         uint32_t m_last_since;
 
         int m_backlight;
-        uint32_t m_backlight_time;
+        uint32_t m_activity_time;
 
         int m_hist_num;
         int m_hist_iter;
         runHistory_t *m_hist_ptr;
 
+        // following inited on BASE_SCREEN
 
-        // int m_last_pref_value;
+        int m_value_num;
+        int m_value_count;
+        valueIdType *m_value_ids;
+
+        // following inited by initValueMembers
+        // on screen change
+
+        myIOTValue *m_value;
+        valueIdType m_value_id;
+        valueType m_value_type;
+        valueStyle m_value_style;
+        int m_value_min;
+        int m_value_max;
+        int m_cur_value;
+
+        // methods
 
         void backlight(int val);
         void setScreen(int screen_num);
+
+        void initValueMembers();
+        bool handleValue(int button_num, int event_type);
 
 };
 

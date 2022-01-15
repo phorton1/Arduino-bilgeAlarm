@@ -20,7 +20,9 @@
 
 #define DEFAULT_DISABLED            0          // enabled,disabled
 #define DEFAULT_BACKLIGHT_SECS      0          // off,secs
-#define DEFAULT_MENU_SECS            15
+#define MIN_BACKLIGHT_SECS          30
+#define DEFAULT_MENU_SECS           15         // off
+#define MIN_MENU_SECS               15
 
 #define DEFAULT_ERR_RUN_TIME        10         // off,secs
 #define DEFAULT_CRIT_RUN_TIME       30         // off,secs
@@ -28,7 +30,7 @@
 #define DEFAULT_ERR_PER_DAY         20         // off,secs
 
 #define DEFAULT_EXTRA_RUN_TIME      5          // off,secs
-#define DEFAULT_EXTRA_RUN_MODE      1          // at_start, after_end
+#define DEFAULT_EXTRA_RUN_MODE      0          // at_start, after_end
 #define DEFAULT_EXTRA_RUN_DELAY     1000       // millis after pump goes off to start after_end
 
 #define DEFAULT_SENSE_MILLIS        10         // millis
@@ -141,19 +143,19 @@ const valDescriptor bilgeAlarm::m_bilge_values[] =
     { ID_ALARM_STATE,      VALUE_TYPE_BENUM,    VALUE_STORE_TOPIC,    VALUE_STYLE_LONG,       (void *) &_alarm_state,   NULL,   { .enum_range = { 0, alarmStates }} },
     { ID_STATE,            VALUE_TYPE_BENUM,    VALUE_STORE_PUB,      VALUE_STYLE_READONLY,   (void *) &_state,         NULL,   { .enum_range = { 0, systemStates }} },
     { ID_TIME_LAST_RUN,    VALUE_TYPE_TIME,     VALUE_STORE_PUB,      VALUE_STYLE_READONLY,   (void *) &_time_last_run, },
-    { ID_SINCE_LAST_RUN,   VALUE_TYPE_INT,      VALUE_STORE_PUB,      VALUE_STYLE_HIST_TIME,  (void *) &_since_last_run,NULL,  { .int_range = { 0, -DEVICE_MAX_INT-1, DEVICE_MAX_INT}}  },
+    { ID_SINCE_LAST_RUN,   VALUE_TYPE_INT,      VALUE_STORE_PUB,      VALUE_STYLE_HIST_TIME,  (void *) &_since_last_run,NULL,   { .int_range = { 0, -DEVICE_MAX_INT-1, DEVICE_MAX_INT}}  },
     { ID_DUR_LAST_RUN,     VALUE_TYPE_INT,      VALUE_STORE_PUB,      VALUE_STYLE_READONLY,   (void *) &_dur_last_run,  NULL,   { .int_range = { 0, 0, DEVICE_MAX_INT}}  },
     { ID_NUM_LAST_HOUR,    VALUE_TYPE_INT,      VALUE_STORE_PUB,      VALUE_STYLE_READONLY,   (void *) &_num_last_hour, NULL,   { .int_range = { 0, 0, DEVICE_MAX_INT}}  },
     { ID_NUM_LAST_DAY,     VALUE_TYPE_INT,      VALUE_STORE_PUB,      VALUE_STYLE_READONLY,   (void *) &_num_last_day,  NULL,   { .int_range = { 0, 0, DEVICE_MAX_INT}}  },
     { ID_NUM_LAST_WEEK,    VALUE_TYPE_INT,      VALUE_STORE_PUB,      VALUE_STYLE_READONLY,   (void *) &_num_last_week, NULL,   { .int_range = { 0, 0, DEVICE_MAX_INT}}  },
 
     { ID_DISABLED,         VALUE_TYPE_ENUM,     VALUE_STORE_PREF,     VALUE_STYLE_NONE,       (void *) &_disabled,       (void *) onDisabled,  { .enum_range = { 0, disabledStates }} },
-    { ID_BACKLIGHT_SECS,   VALUE_TYPE_INT,      VALUE_STORE_PREF,     VALUE_STYLE_OFF_ZERO,   (void *) &_backlight_secs, NULL,  { .int_range = { DEFAULT_BACKLIGHT_SECS,   30,  3600}}  },
-    { ID_MENU_SECS,        VALUE_TYPE_INT,      VALUE_STORE_PREF,     VALUE_STYLE_NONE,   (void *) &_menu_secs, NULL,  { .int_range = {DEFAULT_MENU_SECS,   0,  3600}}  },
+    { ID_BACKLIGHT_SECS,   VALUE_TYPE_INT,      VALUE_STORE_PREF,     VALUE_STYLE_OFF_ZERO,   (void *) &_backlight_secs, NULL,  { .int_range = { DEFAULT_BACKLIGHT_SECS,    MIN_BACKLIGHT_SECS, 3600}}  },
+    { ID_MENU_SECS,        VALUE_TYPE_INT,      VALUE_STORE_PREF,     VALUE_STYLE_OFF_ZERO,   (void *) &_menu_secs,      NULL,  { .int_range = { DEFAULT_MENU_SECS,         MIN_MENU_SECS,      3600}}  },
     { ID_ERR_RUN_TIME,     VALUE_TYPE_INT,      VALUE_STORE_PREF,     VALUE_STYLE_OFF_ZERO,   (void *) &_err_run_time,   NULL,  { .int_range = { DEFAULT_ERR_RUN_TIME,      0,  3600}}  },
     { ID_CRIT_RUN_TIME,    VALUE_TYPE_INT,      VALUE_STORE_PREF,     VALUE_STYLE_OFF_ZERO,   (void *) &_crit_run_time,  NULL,  { .int_range = { DEFAULT_CRIT_RUN_TIME,     0,  3600}}  },
-    { ID_ERR_PER_HOUR,     VALUE_TYPE_INT,      VALUE_STORE_PREF,     VALUE_STYLE_OFF_ZERO,   (void *) &_err_per_hour,   NULL,  { .int_range = { DEFAULT_ERR_PER_HOUR,      0,  MAX_RUN_HISTORY}}   },
-    { ID_ERR_PER_DAY,      VALUE_TYPE_INT,      VALUE_STORE_PREF,     VALUE_STYLE_OFF_ZERO,   (void *) &_err_per_day,    NULL,  { .int_range = { DEFAULT_ERR_PER_DAY,       0,  MAX_RUN_HISTORY}}   },
+    { ID_ERR_PER_HOUR,     VALUE_TYPE_INT,      VALUE_STORE_PREF,     VALUE_STYLE_OFF_ZERO,   (void *) &_err_per_hour,   NULL,  { .int_range = { DEFAULT_ERR_PER_HOUR,      0,  MAX_RUN_HISTORY-1}}   },
+    { ID_ERR_PER_DAY,      VALUE_TYPE_INT,      VALUE_STORE_PREF,     VALUE_STYLE_OFF_ZERO,   (void *) &_err_per_day,    NULL,  { .int_range = { DEFAULT_ERR_PER_DAY,       0,  MAX_RUN_HISTORY-1}}   },
     { ID_RUN_EMERGENCY,    VALUE_TYPE_INT,      VALUE_STORE_PREF,     VALUE_STYLE_OFF_ZERO,   (void *) &_run_emergency,  NULL,  { .int_range = { DEFAULT_RUN_EMERGENCY,     0,  3600}}  },
     { ID_EXTRA_RUN_TIME,   VALUE_TYPE_INT,      VALUE_STORE_PREF,     VALUE_STYLE_OFF_ZERO,   (void *) &_extra_run_time, NULL,  { .int_range = { DEFAULT_EXTRA_RUN_TIME,    0,  3600}}  },
     { ID_EXTRA_RUN_MODE,   VALUE_TYPE_ENUM,     VALUE_STORE_PREF,     VALUE_STYLE_NONE,       (void *) &_extra_run_mode, NULL,  { .enum_range = { 0, pumpExtraType }} },
@@ -286,6 +288,14 @@ void bilgeAlarm::setup()
     _history_link += getUUID();
     _history_link += "' target='_blank'>History</a>";
 
+    // See core notes in myIOTTypes.h
+    //---------------------------------
+    // Since I have removed all direct or indirect calls to setXXX()
+    // from the stateTask() call chain, this task may now run on
+    // ESP32_CORE_OTHER==0, separate from loop(), and the serial and
+    // websocket task which must all run on ESP32_CORE_ARDUINO==1
+    // for the LCD to work correctly.
+
     LOGI("starting stateTask");
     xTaskCreatePinnedToCore(stateTask,
         "stateTask",
@@ -293,7 +303,7 @@ void bilgeAlarm::setup()
         NULL,           // param
         5,  	        // note that the priority is higher than one
         NULL,           // returned task handle
-        ESP32_CORE_ARDUINO);
+        ESP32_CORE_OTHER);
 
     proc_leave();
     LOGD("bilgeAlarm::setup(%s) completed",getVersion());
@@ -550,9 +560,11 @@ void bilgeAlarm::stateTask(void *param)
 
 void bilgeAlarm::stateMachine()
     // THIS IS THE STATE MACHINE FOR THE BILGE ALARM
-    // There is an issue that we don't want to publish to WS or MQTT in the middle of time,
-    // but I am going to ignore that for now and may eventually implement an asynchronous
-    // publishing task in myIOTValues.cpp
+    // DO NOT CALL setXX directly or indirectly from this!!!
+    //
+    // There is an issue that we don't want to publish to WS or MQTT in the middle of this
+    // due to timing delay, but as important, the LCD wont work if we do any setXXX() value
+    // changes from here and this happens to be running on Core 0 ...
 {
     uint32_t now = millis();
     time_t time_now = time(NULL);

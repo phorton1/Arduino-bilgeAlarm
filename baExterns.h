@@ -10,7 +10,7 @@ extern void startAlarm();
 
 
 //------------------------------------
-// in baCounters.cpp
+// in baRuns.cpp
 //------------------------------------
 
 #define TEST_TIMES  1
