@@ -48,6 +48,7 @@ typedef struct {
     uint16_t flags;   // == emergency pump
 } runHistory_t;
 
+extern void initHistoryRTCMemory();
 
 extern void initRunIterator(int *iterator);
 extern runHistory_t *getNextRun(int *iterator);

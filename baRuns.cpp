@@ -4,6 +4,7 @@
 #include "bilgeAlarm.h"
 #include "baExterns.h"
 #include <myIOTLog.h>
+#include <rom/rtc.h>
 
 
 static time_t start_duration;
@@ -17,9 +18,19 @@ static time_t clear_hour_time;
     // any runs before this time.
 
 
-static runHistory_t run_history[MAX_RUN_HISTORY];
-static int run_head = 0;
-static int prev_head = -1;
+static RTC_NOINIT_ATTR runHistory_t run_history[MAX_RUN_HISTORY];
+static RTC_NOINIT_ATTR int run_head;
+static RTC_NOINIT_ATTR int prev_head;
+    // As opposed to RTC_DATA_ATTR, RTC_NOINIT_ATTR does not init the memory
+    // so we have to do it explicitly in initHistory()
+
+void initHistoryRTCMemory()
+{
+    LOGI("initHisttoryRTCMemory()");
+    run_head = 0;
+    prev_head = -1;
+    memset(run_history,0,sizeof(run_history));
+}
 
 
 uint32_t getStartDuration()

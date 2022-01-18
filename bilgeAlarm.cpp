@@ -257,6 +257,12 @@ bilgeAlarm::bilgeAlarm()
     setTabLayouts(dash_items,config_items);
 }
 
+void bilgeAlarm::onInitRTCMemory()
+{
+    LOGI("bilgeAlarm::onInitRTCMemory()");
+    initHistoryRTCMemory();
+    myIOTDevice::onInitRTCMemory();
+}
 
 
 void bilgeAlarm::setup()
