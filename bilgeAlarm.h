@@ -14,6 +14,8 @@
     // includes LEDs, DEMO_MODE
 #define HAS_LCD_LINE_VALUES  0
 
+#define DEFAULT_LED_BRIGHT        10
+#define DEFAULT_EXT_LED_BRIGHT    60
 
 //------------------------
 // pins
@@ -79,8 +81,6 @@
 // configuration
 
 #define ID_DISABLED         "ALARMS"                // _disabled = enabled,disabled = LEDs still light, but no errors, extra runs, or other functionality will take place
-#define ID_BACKLIGHT_SECS   "BACKLIGHT_SECS"        // off,secs = backlight will turn off if no buttons pressed after this many seconds
-#define ID_MENU_SECS        "MENU_SECS"             // off,secs = will return to the MAIN SCREEN if no buttons pressed after this many seconds
 #define ID_ERR_RUN_TIME     "ERR_RUN_TIME"          // off,secs - pump running this many seconds or more is an "error alarm"
 #define ID_CRIT_RUN_TIME    "CRIT_RUN_TIME"         // off,secs - pump running this many seconds or more is a "critical error alarm"
 #define ID_ERR_PER_HOUR     "ERR_PER_HOUR"          // off,num - pump running more than this many times per hour is an "error alarm"
@@ -99,6 +99,11 @@
     //    when it is not really on for some period of time as the motor spins down.
 #define ID_RUN_EMERGENCY    "RUN_EMERGENCY"         // off,secs - how long to turn on the relay as long as the emergency switch turns on
     // This will run the main pump if the emergency pump turns on, and continue running it for N more seconds than the emergency pump
+#define ID_LED_BRIGHT       "LED_BRIGHT"            // 0..255 main ws2812 LED brightness
+#define ID_EXT_LED_BRIGHT   "EXT_LED_BRIGHT"        // 0..255 ext ws2812 LED brightness
+#define ID_BACKLIGHT_SECS   "BACKLIGHT_SECS"        // off,secs = backlight will turn off if no buttons pressed after this many seconds
+#define ID_MENU_SECS        "MENU_SECS"             // off,secs = will return to the MAIN SCREEN if no buttons pressed after this many seconds
+
 
 // optional
 
@@ -173,8 +178,8 @@ public:
     virtual void setup() override;
     virtual void loop() override;
 
-    static uint32_t getState()       { return _state; }
-    static uint32_t getAlarmState()  { return _alarm_state; }
+    static uint32_t getState()       { return m_publish_state.state; }
+    static uint32_t getAlarmState()  { return m_publish_state.alarm_state; }
 
     static void clearError();
     static void suppressAlarm();
@@ -249,6 +254,7 @@ private:
 
     static void onForceRelay(const myIOTValue *desc, bool val);
     static void onDisabled(const myIOTValue *desc, bool val);
+    static void onLedBright(const myIOTValue *desc, bool val);
     virtual void onValueChanged(const myIOTValue *value, valueStore from=VALUE_STORE_PROG) override;
     virtual String onCustomLink(const String &path) override;
 
@@ -258,6 +264,8 @@ private:
     #if HAS_LCD_LINE_VALUES
         static void onLcdLine(const myIOTValue *desc, const char *val);
     #endif
+
+    virtual void showIncSetupProgress() override;
 
 };
 

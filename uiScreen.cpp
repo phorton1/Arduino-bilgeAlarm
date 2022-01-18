@@ -42,7 +42,7 @@
 #define MIN_BACKLIGHT       15
 #define MIN_MENUTIMEOUT     15
 
-#define DEBUG_SCREEN  1
+#define DEBUG_SCREEN  0
 
 
 #if DEBUG_SCREEN
@@ -62,8 +62,7 @@
     // rotate error screens
 #define AUTO_MAIN_DURATION        3000
     // keep the main screen on a little longer
-#define ALARM_CLEARED_DURATION    4000
-    // keep the stats screen on a little longer
+#define ALARM_CLEARED_DURATION    2000
 
 
 #define MENU_MODE_MAIN      0     // main mode - main screen and commands
@@ -460,7 +459,7 @@ void uiScreen::onValueChanged(const myIOTValue *value, valueStore from)
 {
     const char *id = value->getId();
 
-    LOGD("uiScreen onValueChanged(%s) from(%d) on core(%d)",id,from,xPortGetCoreID());
+    // DBG_SCREEN("uiScreen onValueChanged(%s) from(%d) on core(%d)",id,from,xPortGetCoreID());
 
     if (!strcmp(id,ID_REBOOT))
     {

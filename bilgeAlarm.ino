@@ -2,6 +2,7 @@
 // bilgeAlarm.ino
 //-----------------------------------
 #include "bilgeAlarm.h"
+#include "baExterns.h"      // for pixels, maybe SDCAR
 #include <myIOTLog.h>
 
 #ifdef WITH_SD
@@ -18,6 +19,7 @@ void setup()
 {
     Serial.begin(115200);
     delay(1000);
+    initPixels();
 
     bilgeAlarm::setDeviceType(BILGE_ALARM);
     bilgeAlarm::setDeviceVersion(BILGE_ALARM_VERSION);
@@ -44,6 +46,12 @@ void setup()
 
     bilge_alarm = new bilgeAlarm();
     bilge_alarm->setup();
+
+    showIncSetupPixel();    // 4 (external)
+        // 1,2,3 is IOTDevice.
+        // 4 is probably this one
+        // and 5 is probably the alarmTask starting up
+        // then they go off
 
     LOGU("bilgeAlarm.ino setup() finished",0);
 }

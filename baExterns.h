@@ -1,19 +1,24 @@
 //------------------------------------
 // baExterns.h
 //------------------------------------
+// in baAlarm.cpp
+
 #pragma once
 
-// external declarations in various files
 
 extern void startAlarm();
-    // in baAlarm.cpp
+extern void initPixels();
+extern void setPixelBright(bool external,uint8_t val);
+extern void showIncSetupPixel();
+    // called 3 times by myIOTDevice and once when alarmTask() is running()
+
 
 
 //------------------------------------
 // in baRuns.cpp
 //------------------------------------
 
-#define TEST_TIMES  1
+#define TEST_TIMES  0
     // define allows me to test in compressed time where
     // one hour == 1 minute, one day=3 minutes, and one week==5 minutes
 

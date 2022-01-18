@@ -81,7 +81,6 @@ static valueIdType config_items[] = {
     ID_DEMO_MODE,
 #endif
     ID_DISABLED,
-    ID_BACKLIGHT_SECS,
     ID_ERR_RUN_TIME,
     ID_CRIT_RUN_TIME,
     ID_ERR_PER_HOUR,
@@ -93,6 +92,9 @@ static valueIdType config_items[] = {
     ID_SENSE_MILLIS,
     ID_PUMP_DEBOUNCE,
     ID_RELAY_DEBOUNCE,
+    ID_LED_BRIGHT,
+    ID_EXT_LED_BRIGHT,
+    ID_BACKLIGHT_SECS,
     ID_MENU_SECS,
     0
 };
@@ -118,7 +120,7 @@ static enumValue systemStates[] = {
     "TOO_OFTEN_HOUR",
     "TOO_OFTEN_DAY",
     "TOO_LONG",
-    "CRIT_LONG",
+    "WAY_TOO_LONG",
     "RELAY_FORCED",
     "RELAY_EMERGENCY",
     "RELAY_EXTRA",
@@ -139,19 +141,17 @@ const valDescriptor bilgeAlarm::m_bilge_values[] =
     { ID_CLEAR_ERROR,      VALUE_TYPE_COMMAND,  VALUE_STORE_MQTT_SUB, VALUE_STYLE_NONE,       NULL,                     (void *) clearError },
     { ID_CLEAR_HISTORY,    VALUE_TYPE_COMMAND,  VALUE_STORE_MQTT_SUB, VALUE_STYLE_NONE,       NULL,                     (void *) clearHistory },
 
-    { ID_STATE,            VALUE_TYPE_BENUM,    VALUE_STORE_PUB,      VALUE_STYLE_READONLY,   (void *) &_state,         NULL,   { .enum_range = { 0, systemStates }} },
-    { ID_ALARM_STATE,      VALUE_TYPE_BENUM,    VALUE_STORE_TOPIC,    VALUE_STYLE_LONG,       (void *) &_alarm_state,   NULL,   { .enum_range = { 0, alarmStates }} },
-    { ID_STATE,            VALUE_TYPE_BENUM,    VALUE_STORE_PUB,      VALUE_STYLE_READONLY,   (void *) &_state,         NULL,   { .enum_range = { 0, systemStates }} },
-    { ID_TIME_LAST_RUN,    VALUE_TYPE_TIME,     VALUE_STORE_PUB,      VALUE_STYLE_READONLY,   (void *) &_time_last_run, },
-    { ID_SINCE_LAST_RUN,   VALUE_TYPE_INT,      VALUE_STORE_PUB,      VALUE_STYLE_HIST_TIME,  (void *) &_since_last_run,NULL,   { .int_range = { 0, -DEVICE_MAX_INT-1, DEVICE_MAX_INT}}  },
-    { ID_DUR_LAST_RUN,     VALUE_TYPE_INT,      VALUE_STORE_PUB,      VALUE_STYLE_READONLY,   (void *) &_dur_last_run,  NULL,   { .int_range = { 0, 0, DEVICE_MAX_INT}}  },
-    { ID_NUM_LAST_HOUR,    VALUE_TYPE_INT,      VALUE_STORE_PUB,      VALUE_STYLE_READONLY,   (void *) &_num_last_hour, NULL,   { .int_range = { 0, 0, DEVICE_MAX_INT}}  },
-    { ID_NUM_LAST_DAY,     VALUE_TYPE_INT,      VALUE_STORE_PUB,      VALUE_STYLE_READONLY,   (void *) &_num_last_day,  NULL,   { .int_range = { 0, 0, DEVICE_MAX_INT}}  },
-    { ID_NUM_LAST_WEEK,    VALUE_TYPE_INT,      VALUE_STORE_PUB,      VALUE_STYLE_READONLY,   (void *) &_num_last_week, NULL,   { .int_range = { 0, 0, DEVICE_MAX_INT}}  },
+    { ID_STATE,            VALUE_TYPE_BENUM,    VALUE_STORE_PUB,      VALUE_STYLE_READONLY,   (void *) &m_publish_state.state,         NULL,   { .enum_range = { 0, systemStates }} },
+    { ID_ALARM_STATE,      VALUE_TYPE_BENUM,    VALUE_STORE_TOPIC,    VALUE_STYLE_LONG,       (void *) &m_publish_state.alarm_state,   NULL,   { .enum_range = { 0, alarmStates }} },
+    { ID_STATE,            VALUE_TYPE_BENUM,    VALUE_STORE_PUB,      VALUE_STYLE_READONLY,   (void *) &m_publish_state.state,         NULL,   { .enum_range = { 0, systemStates }} },
+    { ID_TIME_LAST_RUN,    VALUE_TYPE_TIME,     VALUE_STORE_PUB,      VALUE_STYLE_READONLY,   (void *) &m_publish_state.time_last_run, },
+    { ID_SINCE_LAST_RUN,   VALUE_TYPE_INT,      VALUE_STORE_PUB,      VALUE_STYLE_HIST_TIME,  (void *) &m_publish_state.since_last_run,NULL,   { .int_range = { 0, -DEVICE_MAX_INT-1, DEVICE_MAX_INT}}  },
+    { ID_DUR_LAST_RUN,     VALUE_TYPE_INT,      VALUE_STORE_PUB,      VALUE_STYLE_READONLY,   (void *) &m_publish_state.dur_last_run,  NULL,   { .int_range = { 0, 0, DEVICE_MAX_INT}}  },
+    { ID_NUM_LAST_HOUR,    VALUE_TYPE_INT,      VALUE_STORE_PUB,      VALUE_STYLE_READONLY,   (void *) &m_publish_state.num_last_hour, NULL,   { .int_range = { 0, 0, DEVICE_MAX_INT}}  },
+    { ID_NUM_LAST_DAY,     VALUE_TYPE_INT,      VALUE_STORE_PUB,      VALUE_STYLE_READONLY,   (void *) &m_publish_state.num_last_day,  NULL,   { .int_range = { 0, 0, DEVICE_MAX_INT}}  },
+    { ID_NUM_LAST_WEEK,    VALUE_TYPE_INT,      VALUE_STORE_PUB,      VALUE_STYLE_READONLY,   (void *) &m_publish_state.num_last_week, NULL,   { .int_range = { 0, 0, DEVICE_MAX_INT}}  },
 
     { ID_DISABLED,         VALUE_TYPE_ENUM,     VALUE_STORE_PREF,     VALUE_STYLE_NONE,       (void *) &_disabled,       (void *) onDisabled,  { .enum_range = { 0, disabledStates }} },
-    { ID_BACKLIGHT_SECS,   VALUE_TYPE_INT,      VALUE_STORE_PREF,     VALUE_STYLE_OFF_ZERO,   (void *) &_backlight_secs, NULL,  { .int_range = { DEFAULT_BACKLIGHT_SECS,    MIN_BACKLIGHT_SECS, 3600}}  },
-    { ID_MENU_SECS,        VALUE_TYPE_INT,      VALUE_STORE_PREF,     VALUE_STYLE_OFF_ZERO,   (void *) &_menu_secs,      NULL,  { .int_range = { DEFAULT_MENU_SECS,         MIN_MENU_SECS,      3600}}  },
     { ID_ERR_RUN_TIME,     VALUE_TYPE_INT,      VALUE_STORE_PREF,     VALUE_STYLE_OFF_ZERO,   (void *) &_err_run_time,   NULL,  { .int_range = { DEFAULT_ERR_RUN_TIME,      0,  3600}}  },
     { ID_CRIT_RUN_TIME,    VALUE_TYPE_INT,      VALUE_STORE_PREF,     VALUE_STYLE_OFF_ZERO,   (void *) &_crit_run_time,  NULL,  { .int_range = { DEFAULT_CRIT_RUN_TIME,     0,  3600}}  },
     { ID_ERR_PER_HOUR,     VALUE_TYPE_INT,      VALUE_STORE_PREF,     VALUE_STYLE_OFF_ZERO,   (void *) &_err_per_hour,   NULL,  { .int_range = { DEFAULT_ERR_PER_HOUR,      0,  MAX_RUN_HISTORY-1}}   },
@@ -163,6 +163,10 @@ const valDescriptor bilgeAlarm::m_bilge_values[] =
     { ID_SENSE_MILLIS,     VALUE_TYPE_INT,      VALUE_STORE_PREF,     VALUE_STYLE_NONE,       (void *) &_sense_millis,   NULL,  { .int_range = { DEFAULT_SENSE_MILLIS,      5,  30000}} },
     { ID_PUMP_DEBOUNCE,    VALUE_TYPE_INT,      VALUE_STORE_PREF,     VALUE_STYLE_NONE,       (void *) &_pump_debounce,  NULL,  { .int_range = { DEFAULT_PUMP_DEBOUNCE,     5,  30000}} },
     { ID_RELAY_DEBOUNCE,   VALUE_TYPE_INT,      VALUE_STORE_PREF,     VALUE_STYLE_NONE,       (void *) &_relay_debounce, NULL,  { .int_range = { DEFAULT_RELAY_DEBOUNCE,    5,  30000}} },
+    { ID_BACKLIGHT_SECS,   VALUE_TYPE_INT,      VALUE_STORE_PREF,     VALUE_STYLE_OFF_ZERO,   (void *) &_backlight_secs, NULL,  { .int_range = { DEFAULT_BACKLIGHT_SECS,    MIN_BACKLIGHT_SECS, 3600}}  },
+    { ID_MENU_SECS,        VALUE_TYPE_INT,      VALUE_STORE_PREF,     VALUE_STYLE_OFF_ZERO,   (void *) &_menu_secs,      NULL,  { .int_range = { DEFAULT_MENU_SECS,         MIN_MENU_SECS,      3600}}  },
+    { ID_LED_BRIGHT,       VALUE_TYPE_INT,      VALUE_STORE_PREF,     VALUE_STYLE_OFF_ZERO,   NULL,                      (void *) onLedBright, { .int_range = { DEFAULT_LED_BRIGHT, 0, 255}}  },
+    { ID_EXT_LED_BRIGHT,   VALUE_TYPE_INT,      VALUE_STORE_PREF,     VALUE_STYLE_OFF_ZERO,   NULL,                      (void *) onLedBright, { .int_range = { DEFAULT_LED_BRIGHT, 0, 255}}  },
 
     { ID_FORCE_RELAY,      VALUE_TYPE_BOOL,     VALUE_STORE_TOPIC,    VALUE_STYLE_NONE,       (void *) &_FORCE_RELAY,    (void *) onForceRelay },
 
@@ -185,7 +189,7 @@ const valDescriptor bilgeAlarm::m_bilge_values[] =
 
 #define NUM_BILGE_VALUES (sizeof(m_bilge_values)/sizeof(valDescriptor))
 
-// values
+// values (private)
 
 uint32_t bilgeAlarm::_state;
 uint32_t bilgeAlarm::_alarm_state;
@@ -197,6 +201,7 @@ int      bilgeAlarm::_num_last_day;
 int      bilgeAlarm::_num_last_week;
 String   bilgeAlarm::_history_link;
 
+// values (public)
 
 bool bilgeAlarm::_disabled;
 int  bilgeAlarm::_backlight_secs;
@@ -280,7 +285,14 @@ void bilgeAlarm::setup()
     // ui_screen =
     new uiScreen(button_pins);
 
+    showIncSetupPixel();    // 1
+
     myIOTDevice::setup();
+
+    showIncSetupPixel();    // 3
+
+    setPixelBright(0,getInt(ID_LED_BRIGHT));
+    setPixelBright(1,getInt(ID_EXT_LED_BRIGHT));
 
     startAlarm();
 
@@ -335,9 +347,11 @@ void bilgeAlarm::setup()
 
     static void debugState(const char *what, uint32_t in, uint32_t rslt, enumValue *ptr)
     {
-        LOGD("%s(%s) => %s",
+        LOGD("%s(0x%04x=%s) => 0x%04x=%s",
             what,
+            in,
             stateString(in,ptr).c_str(),
+            rslt,
             stateString(rslt,ptr).c_str());
     }
 #else
@@ -347,34 +361,38 @@ void bilgeAlarm::setup()
 
 void bilgeAlarm::setState(uint32_t state)
 {
+    debugState("setState",state,state,systemStates);
     _state = state;
-    debugState("setState",state,_state,systemStates);
 }
 void bilgeAlarm::addState(uint32_t state)
 {
-    _state |= state;
-    debugState("addState",state,_state,systemStates);
+    uint32_t new_state = _state | state;
+    debugState("addState",state,new_state,systemStates);
+    _state = new_state;
+
 }
 void bilgeAlarm::clearState(uint32_t state)
 {
-    _state &= ~state;
-    debugState("clearState",state,_state,systemStates);
-}
+    uint32_t new_state = _state & ~state;
+    debugState("clearState",state,new_state,systemStates);
+    _state = new_state;}
 
 void bilgeAlarm::setAlarmState(uint32_t alarm_state)
 {
+    debugState("setAlarmState",alarm_state,alarm_state,alarmStates);
     _alarm_state = alarm_state;
-    debugState("setAlarmState",alarm_state,_alarm_state,alarmStates);
 }
 void bilgeAlarm::addAlarmState(uint32_t alarm_state)
 {
-    _alarm_state |= alarm_state;
-    debugState("addAlarmState",alarm_state,_alarm_state,alarmStates);
+    uint32_t new_state = _alarm_state | alarm_state;
+    debugState("addAlarmState",alarm_state,new_state,alarmStates);
+    _alarm_state = new_state;
 }
 void bilgeAlarm::clearAlarmState(uint32_t alarm_state)
 {
-    _alarm_state &= ~alarm_state;
-    debugState("clearAlarmState",alarm_state,_alarm_state,alarmStates);
+    uint32_t new_state = _alarm_state & ~alarm_state;
+    debugState("clearAlarmState",alarm_state,new_state,alarmStates);
+    _alarm_state = new_state;
 }
 
 
@@ -467,6 +485,11 @@ void bilgeAlarm::clearError()
     }
 #endif
 
+
+void bilgeAlarm::onLedBright(const myIOTValue *desc, bool val)
+{
+    setPixelBright(strcmp(desc->getId(),ID_LED_BRIGHT),val);
+}
 
 
 void bilgeAlarm::onValueChanged(const myIOTValue *value, valueStore from)
@@ -568,8 +591,6 @@ void bilgeAlarm::stateMachine()
 {
     uint32_t now = millis();
     time_t time_now = time(NULL);
-    uint32_t new_state = _state;
-    uint32_t _alarm_state = _alarm_state;
 
     bool pump1_on = digitalRead(PIN_PUMP1_ON);
     bool pump2_on = digitalRead(PIN_PUMP2_ON);
@@ -578,11 +599,10 @@ void bilgeAlarm::stateMachine()
     bool pump1_valid = now > m_pump1_debounce_time;
     bool pump2_valid = now > m_pump2_debounce_time;
     bool forced_on = _state & STATE_RELAY_FORCED;
-    bool emergency_on = _state & STATE_RELAY_EMERGENCY;
+    bool emergency_relay_on = _state & STATE_RELAY_EMERGENCY;
     bool after_extra = _extra_run_mode && _state & STATE_RELAY_EXTRA;
 
     static uint32_t subtract_relay;
-
 
     // start the run
 
@@ -613,44 +633,51 @@ void bilgeAlarm::stateMachine()
 
         if (pump2_on)
         {
-            addState(STATE_PUMP2_ON);
+            uint32_t new_state = _state | STATE_PUMP2_ON;
+            bool was_emergency = _state & STATE_EMERGENCY;
+
+            if (!_disabled)
+            {
+                new_state |= STATE_EMERGENCY;
+                setAlarmState(ALARM_STATE_EMERGENCY | ALARM_STATE_CRITICAL);
+                if (_run_emergency)
+                {
+                    new_state |= STATE_RELAY_EMERGENCY;
+                    new_state &= ~(STATE_RELAY_EXTRA | STATE_RELAY_FORCED);
+                }
+            }
+
+            setState(new_state);
             setRunFlags(STATE_EMERGENCY);
 
             if (!_disabled)
             {
-                addAlarmState(ALARM_STATE_EMERGENCY);
-                if (!(_state & STATE_EMERGENCY))
+                if (!was_emergency)
                 {
-                    addState(STATE_EMERGENCY);
                     LOGU("ALARM - EMERGENCY PUMP ON!!");
                 }
-                if (_run_emergency)
+                if (!emergency_relay_on)
                 {
                     LOGU("EMERGENCY RELAY ON");
-                    clearState(STATE_RELAY_EXTRA | STATE_RELAY_FORCED);
-                    addState(STATE_RELAY_EMERGENCY);
-                    emergency_on = 1;
+                    emergency_relay_on = 1;
                 }
             }
         }
         else
         {
+            // LOGW("clearing emergency _alarm_state=0x%02x",_alarm_state);
             clearState(STATE_PUMP2_ON);
-            if (!_disabled)
+            if (_alarm_state & ALARM_STATE_EMERGENCY)
             {
-                if (_alarm_state & ALARM_STATE_EMERGENCY)
-                {
-                    LOGU("ALARM - EMERGENCY PUMP OFF - DOWNGRADE TO CRITICAL");
-                    clearState(ALARM_STATE_EMERGENCY);
-                    addState(ALARM_STATE_CRITICAL);
-                }
+                LOGU("ALARM - EMERGENCY PUMP OFF - DOWNGRADE TO CRITICAL");
+                clearAlarmState(ALARM_STATE_EMERGENCY);
             }
         }
     }
 
     // extend the emergency relay as long as the pump2 switch is on
 
-    if (pump2_valid && pump2_on && emergency_on)
+    if (pump2_valid && pump2_on && emergency_relay_on)
     {
         m_relay_time = now + _run_emergency * 1000;
     }
@@ -674,7 +701,7 @@ void bilgeAlarm::stateMachine()
             clearState(STATE_PUMP1_ON);
         }
 
-        if (!_disabled && !forced_on && !emergency_on && _extra_run_time)
+        if (!_disabled && !forced_on && !emergency_relay_on && _extra_run_time)
         {
             if (pump1_on && !_extra_run_mode)
             {
@@ -793,7 +820,7 @@ void bilgeAlarm::stateMachine()
                     subtract_relay = _run_emergency;
                     m_relay_time = now + _run_emergency * 1000;
                 }
-                if (extra_on &&_extra_run_time)
+                else if (extra_on &&_extra_run_time)
                 {
                     if (!_extra_run_mode)
                         subtract_relay = _extra_run_time;
@@ -938,45 +965,54 @@ void bilgeAlarm::stateMachine()
 
 void bilgeAlarm::publishState()
 {
-    if (m_publish_state.state != _state)
+    // critical section
+    uint32_t state = _state;
+    uint32_t alarm_state = _alarm_state;
+    time_t time_last_run = _time_last_run;
+    int since_last_run = _since_last_run;
+    int dur_last_run = _dur_last_run;
+    int num_last_hour = _num_last_hour;
+    int num_last_day = _num_last_day;
+    int num_last_week = _num_last_week;
+    // end critical section
+
+    // bilgeAlarm.cpp (the state machine) can see the _member variables,
+    // but everyone else can only see the m_publish_state members which
+    // are set here ..
+
+    if (m_publish_state.state != state)
     {
-        m_publish_state.state = _state;
-        setBenum(ID_STATE,m_publish_state.state);
+        // LOGD("bilgeAlarm publishing state 0x%04x",state);
+        setBenum(ID_STATE,state);
     }
-    if (m_publish_state.alarm_state != _alarm_state)
+    if (m_publish_state.alarm_state != alarm_state)
     {
-        m_publish_state.alarm_state = _alarm_state;
-        setBenum(ID_ALARM_STATE,m_publish_state.alarm_state);
+        // LOGD("bilgeAlarm publishing alarm_state 0x%04x",alarm_state);
+        setBenum(ID_ALARM_STATE,alarm_state);
     }
-    if (m_publish_state.time_last_run != _time_last_run)
+    if (m_publish_state.time_last_run != time_last_run)
     {
-        m_publish_state.time_last_run = _time_last_run;
-        setTime(ID_TIME_LAST_RUN,m_publish_state.time_last_run);
+        setTime(ID_TIME_LAST_RUN,time_last_run);
     }
-    if (m_publish_state.since_last_run != _since_last_run)
+    if (m_publish_state.since_last_run != since_last_run)
     {
-        m_publish_state.since_last_run = _since_last_run;
-        setInt(ID_SINCE_LAST_RUN,m_publish_state.since_last_run);
+        setInt(ID_SINCE_LAST_RUN,since_last_run);
     }
-    if (m_publish_state.dur_last_run != _dur_last_run)
+    if (m_publish_state.dur_last_run != dur_last_run)
     {
-        m_publish_state.dur_last_run = _dur_last_run;
-        setInt(ID_DUR_LAST_RUN,m_publish_state.dur_last_run);
+        setInt(ID_DUR_LAST_RUN,dur_last_run);
     }
-    if (m_publish_state.num_last_hour != _num_last_hour)
+    if (m_publish_state.num_last_hour != num_last_hour)
     {
-        m_publish_state.num_last_hour = _num_last_hour;
-        setInt(ID_NUM_LAST_HOUR,m_publish_state.num_last_hour);
+        setInt(ID_NUM_LAST_HOUR,num_last_hour);
     }
-    if (m_publish_state.num_last_day != _num_last_day)
+    if (m_publish_state.num_last_day != num_last_day)
     {
-        m_publish_state.num_last_day = _num_last_day;
-        setInt(ID_NUM_LAST_DAY,m_publish_state.num_last_day);
+        setInt(ID_NUM_LAST_DAY,num_last_day);
     }
-    if (m_publish_state.num_last_week != _num_last_week)
+    if (m_publish_state.num_last_week != num_last_week)
     {
-        m_publish_state.num_last_week = _num_last_week;
-        setInt(ID_NUM_LAST_WEEK,m_publish_state.num_last_week);
+        setInt(ID_NUM_LAST_WEEK,num_last_week);
     }
 }
 
