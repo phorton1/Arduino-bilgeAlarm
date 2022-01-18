@@ -2,7 +2,7 @@
 // baAlarm.cpp - see baExterns.h
 //-----------------------------------
 #include "bilgeAlarm.h"
-#include "baExterns.h"
+#include "baAlarm.h"
 #include <myIOTLog.h>
 #include <Adafruit_NeoPixel.h>
 

@@ -812,8 +812,8 @@ void uiScreen::setScreen(int screen_num)
         case SCREEN_HISTORY_BASE:
             m_hist_num = 0;
             m_hist_iter = 0;
-            initRunIterator(&m_hist_iter);
-            print_lcd(0,n0,countRuns(COUNT_ALL));
+            ba_history.initIterator(&m_hist_iter);
+            print_lcd(0,n0,ba_history.countRuns(COUNT_ALL));
             print_lcd(1,n1);
             break;
         case SCREEN_HISTORY:
@@ -1018,7 +1018,7 @@ bool uiScreen::onButton(int button_num, int event_type)
         }
         else if (button_num == 1)
         {
-            m_hist_ptr = getNextRun(&m_hist_iter);
+            m_hist_ptr = ba_history.getNext(&m_hist_iter);
             if (m_hist_ptr)
             {
                 m_hist_num++;
@@ -1036,14 +1036,14 @@ bool uiScreen::onButton(int button_num, int event_type)
                 m_hist_num = 0;
                 m_hist_iter = 0;
                 int iter;
-                initRunIterator(&iter);
-                runHistory_t *ptr = getNextRun(&iter);
+                ba_history.initIterator(&iter);
+                const runHistory_t *ptr = ba_history.getNext(&iter);
                 while (ptr)
                 {
                     m_hist_num++;
                     m_hist_ptr = ptr;
                     m_hist_iter = iter;
-                    ptr = getNextRun(&iter);
+                    ptr = ba_history.getNext(&iter);
                 }
 
                 if (m_hist_num)
@@ -1053,7 +1053,7 @@ bool uiScreen::onButton(int button_num, int event_type)
             }
             else
             {
-                m_hist_ptr = getPrevRun(&m_hist_iter);
+                m_hist_ptr = ba_history.getPrev(&m_hist_iter);
                 if (m_hist_ptr)
                 {
                     m_hist_num--;

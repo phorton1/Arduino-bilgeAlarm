@@ -3,7 +3,8 @@
 //-----------------------------------
 #include "bilgeAlarm.h"
 #include "uiScreen.h"
-#include "baExterns.h"
+#include "baAlarm.h"
+#include "baHistory.h"
 #include <myIOTLog.h>
 
 
@@ -260,7 +261,7 @@ bilgeAlarm::bilgeAlarm()
 void bilgeAlarm::onInitRTCMemory()
 {
     LOGI("bilgeAlarm::onInitRTCMemory()");
-    initHistoryRTCMemory();
+    ba_history.initRTCMemory();
     myIOTDevice::onInitRTCMemory();
 }
 
@@ -419,7 +420,7 @@ void bilgeAlarm::clearHistory()
 {
     LOGU("clearHistory()");
     clearError();
-    clearRuns();
+    ba_history.clearHistory();
     _time_last_run = 0;
     _since_last_run = 0;
     _dur_last_run = 0;
@@ -436,7 +437,7 @@ void bilgeAlarm::clearError()
         if (count_this_run)
         {
             count_this_run = 0;
-            endRun();
+            ba_history.endRun();
         }
         // when we clear either of these errors, we set the time window
         // so that the count goes down to ONE UNDER the error limit,
@@ -448,9 +449,9 @@ void bilgeAlarm::clearError()
         // hopefully the count will roll off before the pump goes back on
 
         if (_state & STATE_TOO_OFTEN_HOUR)
-            setRunWindow(COUNT_HOUR,_err_per_hour - 1);
+            ba_history.setCountWindow(COUNT_HOUR,_err_per_hour - 1);
         if (_state & STATE_TOO_OFTEN_DAY)
-            setRunWindow(COUNT_DAY,_err_per_day - 1);
+            ba_history.setCountWindow(COUNT_DAY,_err_per_day - 1);
 
         // we manually force the relay off in case it is on
 
@@ -510,7 +511,7 @@ String bilgeAlarm::onCustomLink(const String &path)
 {
     if (path.startsWith("getHistory"))
     {
-        return historyHTML();
+        return ba_history.getHistoryHTML();
     }
     return "";
 }
@@ -618,7 +619,7 @@ void bilgeAlarm::stateMachine()
             (pump1_on && pump1_valid && !forced_on && !after_extra))
         {
             subtract_relay = 0;
-            startRun();
+            ba_history.startRun();
             _time_last_run = time_now;
             _since_last_run = (int32_t) time_now;
             _dur_last_run = 0;
@@ -654,7 +655,7 @@ void bilgeAlarm::stateMachine()
             }
 
             setState(new_state);
-            setRunFlags(STATE_EMERGENCY);
+            ba_history.setRunFlags(STATE_EMERGENCY);
 
             if (!_disabled)
             {
@@ -739,14 +740,14 @@ void bilgeAlarm::stateMachine()
 
         // calculate duration that the pump has been on by itself
 
-        int duration = time_now - getStartDuration();
+        int duration = time_now - ba_history.getStartDuration();
         duration -= subtract_relay;
 
         // raise duration based alarms
 
         if (_err_run_time && duration > _err_run_time)
         {
-            setRunFlags(STATE_TOO_LONG);
+            ba_history.setRunFlags(STATE_TOO_LONG);
             if (!_disabled && !(_state & STATE_TOO_LONG))
             {
                 LOGU("ALARM - PUMP TOO LONG");
@@ -755,9 +756,10 @@ void bilgeAlarm::stateMachine()
             }
         }
 
+
         if (_crit_run_time && duration > _crit_run_time)
         {
-            setRunFlags(STATE_CRITICAL_TOO_LONG);
+            ba_history.setRunFlags(STATE_CRITICAL_TOO_LONG);
             if (!_disabled && !(_state & STATE_CRITICAL_TOO_LONG))
             {
                 LOGU("ALARM - PUMP CRITICAL TOO LONG");
@@ -862,13 +864,13 @@ void bilgeAlarm::stateMachine()
     {
         last_clock_time = time_now;
 
-        int count_hour = countRuns(COUNT_HOUR);
-        int count_day = countRuns(COUNT_DAY);
+        int count_hour = ba_history.countRuns(COUNT_HOUR);
+        int count_day = ba_history.countRuns(COUNT_DAY);
 
         // not to do with errors, but we use the timer to also update the weekly count
         // EVERY SECOND .. could get slow ...
 
-        _num_last_week = countRuns(COUNT_WEEK);
+        _num_last_week = ba_history.countRuns(COUNT_WEEK);
 
         // set check_clear if there are only TOO_OFTEN ERRORS
         // to auto clear them below, and keep another boolean
@@ -898,7 +900,7 @@ void bilgeAlarm::stateMachine()
 
             if (_err_per_hour && _num_last_hour >= _err_per_hour)
             {
-                setRunFlags(STATE_TOO_OFTEN_HOUR);
+                ba_history.setRunFlags(STATE_TOO_OFTEN_HOUR);
 
                 if (!_disabled)
                 {
@@ -923,7 +925,7 @@ void bilgeAlarm::stateMachine()
 
             if (_err_per_day && _num_last_day >= _err_per_day)
             {
-                setRunFlags(STATE_TOO_OFTEN_DAY);
+                ba_history.setRunFlags(STATE_TOO_OFTEN_DAY);
 
                 if (!_disabled)
                 {
@@ -960,7 +962,7 @@ void bilgeAlarm::stateMachine()
 
     if (count_this_run && pump1_valid && pump2_valid && !pump1_on && !pump2_on)
     {
-        _dur_last_run = endRun();
+        _dur_last_run = ba_history.endRun();
         count_this_run = 0;
         subtract_relay = 0;
     }

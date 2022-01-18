@@ -5,7 +5,7 @@
 #pragma once
 
 #include "bilgeAlarm.h"
-#include "baExterns.h"
+#include "baHistory.h"
 
 
 class uiScreen
@@ -43,7 +43,7 @@ class uiScreen
 
         int m_hist_num;
         int m_hist_iter;
-        runHistory_t *m_hist_ptr;
+        const runHistory_t *m_hist_ptr;
 
         // following inited on BASE_SCREEN
 

@@ -1,201 +1,217 @@
 //-----------------------------------
-// baRuns.cpp - see baExterns.h
+// baHistory.cpp
 //-----------------------------------
+// Interesting devlopement regarding the history in RAM.
+// I moved it to the RTC_NOINIT_ATTR memory and created
+// the onInitRTCMemory() virtual callchain from myIOTDevice::setup
+// when it needs to be re-initialied.  See myIOTDevice.cpp for
+// more information.
+//
+// The history SHALL write a database to the SPIFFS (or SD) file system,
+// which appends each run as a 64 bit (8 byte) record to the file.
+// Upon the call to initRTCMemory(), if present, the last MAX_RUN_HISTORY
+// entries from that file shall be read into memory.
+//
+// I am currently using 416.9K of 1.37M SPIFFS total, which leaves about 800K,
+// or enough room to store about 100,000 runs ... but for safety I would probably
+// keep 10,000 with a rotation scheme on SPIFFS.  Using the SDCard is another
+// option.
+
+#include "baHistory.h"
 #include "bilgeAlarm.h"
-#include "baExterns.h"
 #include <myIOTLog.h>
-#include <rom/rtc.h>
+
+#define DEBUG_HIST  0
+
+#define TEST_TIMES  0
+    // define allows me to test in compressed time where
+    // one hour == 1 minute, one day=3 minutes, and one week==5 minutes
 
 
-static time_t start_duration;
-    // The "duration" that pump1 is "on"
-    // INCLUDES the "extra_time" if EXTRA_MODE(0) "at_start", so
-    // the ERR_RUN_TIME and CRIT_RUN_TIME values must be larger than EXTRA_RUN_TIME
-    // if using EXTRA_RUN_MODE(0) "at_start"
-static time_t clear_day_time;
-static time_t clear_hour_time;
-    // if a clearError is done, these prevents countRuns() from returning
-    // any runs before this time.
+time_t baHistory::m_start_duration;
+RTC_NOINIT_ATTR int baHistory::m_run_head;
+RTC_NOINIT_ATTR int baHistory::m_prev_head;
+RTC_NOINIT_ATTR time_t baHistory::m_clear_day_time;
+RTC_NOINIT_ATTR time_t baHistory::m_clear_hour_time;
+RTC_NOINIT_ATTR runHistory_t baHistory::m_run_history[MAX_RUN_HISTORY];
 
+baHistory ba_history;
 
-static RTC_NOINIT_ATTR runHistory_t run_history[MAX_RUN_HISTORY];
-static RTC_NOINIT_ATTR int run_head;
-static RTC_NOINIT_ATTR int prev_head;
-    // As opposed to RTC_DATA_ATTR, RTC_NOINIT_ATTR does not init the memory
-    // so we have to do it explicitly in initHistory()
-
-void initHistoryRTCMemory()
+void baHistory::clearHistory()
 {
-    LOGI("initHisttoryRTCMemory()");
-    run_head = 0;
-    prev_head = -1;
-    memset(run_history,0,sizeof(run_history));
+    m_run_head = 0;
+    m_prev_head = -1;
+    m_clear_day_time = 0;
+    m_clear_hour_time = 0;
+    memset(m_run_history,0,MAX_RUN_HISTORY * sizeof(runHistory_t));
+}
+
+void baHistory::initRTCMemory()
+{
+    LOGI("baHistory::initRTCMemory()");
+    m_run_head = 0;
+    m_prev_head = -1;
+    m_clear_day_time = 0;
+    m_clear_hour_time = 0;
+    memset(m_run_history,0,sizeof(m_run_history));
 }
 
 
-uint32_t getStartDuration()
+uint32_t baHistory::getStartDuration() const
 {
-    return start_duration;
+    return m_start_duration;
 }
 
 
-void setRunFlags(uint16_t flags)
+void baHistory::setRunFlags(uint16_t flags)
 {
-    run_history[prev_head].flags |= flags;
+    m_run_history[m_prev_head].flags |= flags;
 }
 
 
-void updateStartDuration()
+void baHistory::updateStartDuration()
 {
-    start_duration = time(NULL);
-}
-
-void clearRuns()
-{
-    run_head = 0;
-    prev_head = -1;
-    memset(run_history,0,MAX_RUN_HISTORY * sizeof(runHistory_t));
-
+    m_start_duration = time(NULL);
 }
 
 
-void startRun()
+void baHistory::startRun()
 {
     time_t now = time(NULL);
-    start_duration = now;
-    LOGU("PUMP ON(%d)",run_head);
-    runHistory_t *ptr = &run_history[run_head];
+    m_start_duration = now;
+    LOGU("PUMP ON(%d)",m_run_head);
+    runHistory_t *ptr = &m_run_history[m_run_head];
     ptr->tm = now;
     ptr->dur = 0;
     ptr->flags = 0;
-    prev_head = run_head;
-    run_head++;
-    if (run_head >= MAX_RUN_HISTORY)
-        run_head = 0;
+    m_prev_head = m_run_head;
+    m_run_head++;
+    if (m_run_head >= MAX_RUN_HISTORY)
+        m_run_head = 0;
 }
 
 
-uint32_t endRun()
+uint32_t baHistory::endRun()
 {
     time_t now = time(NULL);
-    int duration = now - start_duration + 1;
-    LOGU("PUMP OFF(%d) %d secs",prev_head,duration);
-    runHistory_t *ptr = &run_history[prev_head];
+    int duration = now - m_start_duration + 1;
+    LOGU("PUMP OFF(%d) %d secs",m_prev_head,duration);
+    runHistory_t *ptr = &m_run_history[m_prev_head];
     ptr->dur = duration;
-    start_duration = 0;
+    m_start_duration = 0;
     return duration;
 }
 
 
 
-void initRunIterator(int *iterator)
+void baHistory::initIterator(int *iterator) const
 {
-    *iterator = run_head;
+    *iterator = m_run_head;
 }
 
 
-runHistory_t *getNextRun(int *iterator)
+const runHistory_t *baHistory::getNext(int *iterator) const
 {
     int head = *iterator;
     head -= 1;
     if (head < 0)
         head = MAX_RUN_HISTORY-1;
-    if (head == run_head)
+    if (head == m_run_head)
         return NULL;
-    if (!run_history[head].tm)
+    if (!m_run_history[head].tm)
         return NULL;
 
     *iterator = head;
-    return &run_history[head];
+    return &m_run_history[head];
 }
 
 
-runHistory_t *getPrevRun(int *iterator)
+const runHistory_t *baHistory::getPrev(int *iterator) const
 {
     int head = *iterator;
     head++;
     if (head >=  MAX_RUN_HISTORY)
         head = 0;
-    if (head == run_head)
+    if (head == m_run_head)
         return NULL;
-    if (!run_history[head].tm)
+    if (!m_run_history[head].tm)
         return NULL;
     *iterator = head;
-    return &run_history[head];
+    return &m_run_history[head];
 }
 
 
 
-int countRuns(int type)
+int baHistory::countRuns(int count_how) const
     // note that this does NOT count the current run which is happening
     // it only counts fully commited runs, so per_day and per_hour alarms
     // happen when the pump turns OFF.   Due to the alarm clearing strategy,
     // the and week counts shown after a clear will more or less be zeroed,
     // though the history still contains all the runs.
 {
-    // LOGD("countRuns(%d) run_head=%d",hours,run_head);
+    // LOGD("countRuns(%d) m_run_head=%d",hours,m_run_head);
     // can't really debug in here since it is called every second
 
     uint32_t cutoff = 0;        // COUNT_ALL
     time_t now = time(NULL);
 
-    if (type == COUNT_WEEK)
+    if (count_how == COUNT_WEEK)
     {
         cutoff = now - (TEST_TIMES ? (5 * 60) : (7 * 24 * 60 * 60));
     }
-    else if (type == COUNT_DAY)
+    else if (count_how == COUNT_DAY)
     {
         cutoff = now - (TEST_TIMES ? (3 * 60) : (24 * 60 * 60));
-        if (clear_day_time > cutoff)
-            cutoff = clear_day_time;
+        if (m_clear_day_time > cutoff)
+            cutoff = m_clear_day_time;
     }
-    else // type == COUNT_HOUR
+    else // count_how == COUNT_HOUR
     {
         cutoff = now - (TEST_TIMES ? (1 * 60) : (60 * 60));
-        if (clear_hour_time > cutoff)
-            cutoff = clear_hour_time;
+        if (m_clear_hour_time > cutoff)
+            cutoff = m_clear_hour_time;
     }
 
     int iter = 0;
     int count = 0;
-    initRunIterator(&iter);
-    runHistory_t *ptr = getNextRun(&iter);
+    initIterator(&iter);
+    const runHistory_t *ptr = getNext(&iter);
 
     while (ptr && ptr->tm >= cutoff)
     {
         count++;
-        ptr = getNextRun(&iter);
+        ptr = getNext(&iter);
     }
 
     return count;
 }
 
 
-void setRunWindow(int type, int num)
+void baHistory::setCountWindow(int type, int num)
 {
-    #if DEBUG_RUNS
-        LOGD("setRunWindow(%d,%d)",type,num);
+    #if DEBUG_HIST
+        LOGD("setCountWindow(%d,%d)",type,num);
     #endif
 
     int iter = 0;
     int count = 0;
-    initRunIterator(&iter);
-    runHistory_t *ptr = getNextRun(&iter);
+    initIterator(&iter);
+    const runHistory_t *ptr = getNext(&iter);
 
     while (ptr)
     {
         count++;
         if (count >= num)
             break;
-        ptr = getNextRun(&iter);
+        ptr = getNext(&iter);
     }
 
     time_t rslt = ptr ? ptr->tm : 0;
-    LOGU("setRunWindow(%d,%d)=%s",type,num,timeToString(rslt).c_str());
+    LOGU("setCountWindow(%d,%d)=%s",type,num,timeToString(rslt).c_str());
     if (type == COUNT_DAY)
-        clear_day_time = rslt;
+        m_clear_day_time = rslt;
     else
-        clear_hour_time = rslt;
+        m_clear_hour_time = rslt;
 }
 
 
@@ -204,7 +220,7 @@ void setRunWindow(int type, int num)
 // might be a stack overflow
 // building this on the stack
 
-String historyHTML()
+String baHistory::getHistoryHTML() const
 {
     String rslt = "<head>\n";
     rslt += "<title>";
@@ -217,8 +233,8 @@ String historyHTML()
 
     int iter = 0;
     int count = 0;
-    initRunIterator(&iter);
-    runHistory_t *ptr = getNextRun(&iter);
+    initIterator(&iter);
+    const runHistory_t *ptr = getNext(&iter);
 
     while (ptr)
     {
@@ -275,7 +291,7 @@ String historyHTML()
         if (ptr->flags & STATE_TOO_OFTEN_DAY) rslt += "TOO OFTEN DAY";
         rslt += "</td></tr>\n";
 
-        ptr = getNextRun(&iter);
+        ptr = getNext(&iter);
     }
 
     if (!count)
