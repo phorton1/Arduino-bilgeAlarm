@@ -1167,10 +1167,10 @@ F 3 "~" H 4400 1700 50  0001 C CNN
 	1    0    0    -1  
 $EndComp
 $Comp
-L Connector_Generic:Conn_01x01 J30
+L Connector_Generic:Conn_01x01 J?
 U 1 1 61F5036D
 P 4500 5650
-F 0 "J30" H 4450 5650 50  0001 L CNN
+F 0 "J?" H 4450 5650 50  0001 L CNN
 F 1 "AUX" H 4750 5650 50  0000 R CNN
 F 2 "cnc3018-PCB:my1pin" H 4500 5650 50  0001 C CNN
 F 3 "~" H 4500 5650 50  0001 C CNN
@@ -1178,10 +1178,10 @@ F 3 "~" H 4500 5650 50  0001 C CNN
 	-1   0    0    1   
 $EndComp
 $Comp
-L Connector_Generic:Conn_01x01 J31
+L Connector_Generic:Conn_01x01 J?
 U 1 1 61F52116
 P 4500 5750
-F 0 "J31" H 4450 5750 50  0001 L CNN
+F 0 "J?" H 4450 5750 50  0001 L CNN
 F 1 "AUX" H 4750 5750 50  0000 R CNN
 F 2 "cnc3018-PCB:my1pin" H 4500 5750 50  0001 C CNN
 F 3 "~" H 4500 5750 50  0001 C CNN
@@ -1189,10 +1189,10 @@ F 3 "~" H 4500 5750 50  0001 C CNN
 	-1   0    0    1   
 $EndComp
 $Comp
-L Connector_Generic:Conn_01x01 J32
+L Connector_Generic:Conn_01x01 J?
 U 1 1 61F5325C
 P 4500 5850
-F 0 "J32" H 4450 5850 50  0001 L CNN
+F 0 "J?" H 4450 5850 50  0001 L CNN
 F 1 "AUX" H 4750 5850 50  0000 R CNN
 F 2 "cnc3018-PCB:my1pin" H 4500 5850 50  0001 C CNN
 F 3 "~" H 4500 5850 50  0001 C CNN
@@ -1200,10 +1200,10 @@ F 3 "~" H 4500 5850 50  0001 C CNN
 	-1   0    0    1   
 $EndComp
 $Comp
-L Connector_Generic:Conn_01x01 J33
+L Connector_Generic:Conn_01x01 J?
 U 1 1 61F54394
 P 4500 5950
-F 0 "J33" H 4450 5950 50  0001 L CNN
+F 0 "J?" H 4450 5950 50  0001 L CNN
 F 1 "AUX" H 4750 5950 50  0000 R CNN
 F 2 "cnc3018-PCB:my1pin" H 4500 5950 50  0001 C CNN
 F 3 "~" H 4500 5950 50  0001 C CNN
@@ -1211,10 +1211,10 @@ F 3 "~" H 4500 5950 50  0001 C CNN
 	-1   0    0    1   
 $EndComp
 $Comp
-L Connector_Generic:Conn_01x01 J34
+L Connector_Generic:Conn_01x01 J?
 U 1 1 61F55455
 P 4500 6050
-F 0 "J34" H 4450 6050 50  0001 L CNN
+F 0 "J?" H 4450 6050 50  0001 L CNN
 F 1 "AUX" H 4750 6050 50  0000 R CNN
 F 2 "cnc3018-PCB:my1pin" H 4500 6050 50  0001 C CNN
 F 3 "~" H 4500 6050 50  0001 C CNN
@@ -1222,10 +1222,10 @@ F 3 "~" H 4500 6050 50  0001 C CNN
 	-1   0    0    1   
 $EndComp
 $Comp
-L Connector_Generic:Conn_01x01 J35
+L Connector_Generic:Conn_01x01 J?
 U 1 1 61F5657F
 P 4500 6150
-F 0 "J35" H 4450 6150 50  0001 L CNN
+F 0 "J?" H 4450 6150 50  0001 L CNN
 F 1 "AUX" H 4750 6150 50  0000 R CNN
 F 2 "cnc3018-PCB:my1pin" H 4500 6150 50  0001 C CNN
 F 3 "~" H 4500 6150 50  0001 C CNN
@@ -1233,10 +1233,10 @@ F 3 "~" H 4500 6150 50  0001 C CNN
 	-1   0    0    1   
 $EndComp
 $Comp
-L Connector_Generic:Conn_01x01 J36
+L Connector_Generic:Conn_01x01 J?
 U 1 1 61F577F6
 P 4900 5650
-F 0 "J36" H 4850 5650 50  0001 L CNN
+F 0 "J?" H 4850 5650 50  0001 L CNN
 F 1 "AUX" H 5150 5650 50  0000 R CNN
 F 2 "cnc3018-PCB:my1pin" H 4900 5650 50  0001 C CNN
 F 3 "~" H 4900 5650 50  0001 C CNN
@@ -1244,10 +1244,10 @@ F 3 "~" H 4900 5650 50  0001 C CNN
 	1    0    0    -1  
 $EndComp
 $Comp
-L Connector_Generic:Conn_01x01 J37
+L Connector_Generic:Conn_01x01 J?
 U 1 1 61F5AD42
 P 4900 5750
-F 0 "J37" H 4850 5750 50  0001 L CNN
+F 0 "J?" H 4850 5750 50  0001 L CNN
 F 1 "AUX" H 5150 5750 50  0000 R CNN
 F 2 "cnc3018-PCB:my1pin" H 4900 5750 50  0001 C CNN
 F 3 "~" H 4900 5750 50  0001 C CNN
@@ -1255,10 +1255,10 @@ F 3 "~" H 4900 5750 50  0001 C CNN
 	1    0    0    -1  
 $EndComp
 $Comp
-L Connector_Generic:Conn_01x01 J38
+L Connector_Generic:Conn_01x01 J?
 U 1 1 61F5BE86
 P 4900 5850
-F 0 "J38" H 4850 5850 50  0001 L CNN
+F 0 "J?" H 4850 5850 50  0001 L CNN
 F 1 "AUX" H 5150 5850 50  0000 R CNN
 F 2 "cnc3018-PCB:my1pin" H 4900 5850 50  0001 C CNN
 F 3 "~" H 4900 5850 50  0001 C CNN
@@ -1266,10 +1266,10 @@ F 3 "~" H 4900 5850 50  0001 C CNN
 	1    0    0    -1  
 $EndComp
 $Comp
-L Connector_Generic:Conn_01x01 J39
+L Connector_Generic:Conn_01x01 J?
 U 1 1 61F5CF27
 P 4900 5950
-F 0 "J39" H 4850 5950 50  0001 L CNN
+F 0 "J?" H 4850 5950 50  0001 L CNN
 F 1 "AUX" H 5150 5950 50  0000 R CNN
 F 2 "cnc3018-PCB:my1pin" H 4900 5950 50  0001 C CNN
 F 3 "~" H 4900 5950 50  0001 C CNN
@@ -1277,10 +1277,10 @@ F 3 "~" H 4900 5950 50  0001 C CNN
 	1    0    0    -1  
 $EndComp
 $Comp
-L Connector_Generic:Conn_01x01 J40
+L Connector_Generic:Conn_01x01 J?
 U 1 1 61F5DFB5
 P 4900 6050
-F 0 "J40" H 4850 6050 50  0001 L CNN
+F 0 "J?" H 4850 6050 50  0001 L CNN
 F 1 "AUX" H 5150 6050 50  0000 R CNN
 F 2 "cnc3018-PCB:my1pin" H 4900 6050 50  0001 C CNN
 F 3 "~" H 4900 6050 50  0001 C CNN
@@ -1288,10 +1288,10 @@ F 3 "~" H 4900 6050 50  0001 C CNN
 	1    0    0    -1  
 $EndComp
 $Comp
-L Connector_Generic:Conn_01x01 J41
+L Connector_Generic:Conn_01x01 J?
 U 1 1 61F5F048
 P 4900 6150
-F 0 "J41" H 4850 6150 50  0001 L CNN
+F 0 "J?" H 4850 6150 50  0001 L CNN
 F 1 "AUX" H 5150 6150 50  0000 R CNN
 F 2 "cnc3018-PCB:my1pin" H 4900 6150 50  0001 C CNN
 F 3 "~" H 4900 6150 50  0001 C CNN

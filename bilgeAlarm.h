@@ -30,9 +30,8 @@
 // PIN_MISO  = 19
 
 #define PIN_BUTTON0         13
-#define PIN_BUTTON1         14
-#define PIN_BUTTON2         33
-#define PIN_BUTTON3         32
+#define PIN_BUTTON1         33
+#define PIN_BUTTON2         32
 
 #define PIN_PUMP1_ON        36
 #define PIN_PUMP2_ON        39
