@@ -270,13 +270,20 @@ function openWebSocket()
     $('.myiot').attr("disabled",1);
 
     // is_server connects to HTTPS Server port using
-    // WSS at the url /ws
+    // WSS at the url /ws, or HTTP Server at 8080
 
-    var url = 'wss://' + location.host + "/ws";
+    var url;
+    if (is_server)
+    {
+        if (location.port == '8080')    // specific HTTP port
+            url = 'ws://' + location.host + "/ws";
+        else
+            url = 'wss://' + location.host + "/ws";
+    }
 
     // !is_server uses HTTP to location.port + 1, or 81 by default
 
-    if (!is_server)
+    else
     {
         // allow for extracting the port+1 from ports other than default 80
         var port = location.port;
@@ -949,9 +956,12 @@ function startMyIOT()
     console.log("startMyIOT()");
 
     // we identify if this is being served from the rPi
-    // by whether or not the protocol is https
+    // by whether or not the protocol is https or the
+    // port is 8080 (by default my "things" use 80/81)
 
-    is_server = (location.protocol == 'https:');
+    is_server =
+        (location.protocol == 'https:') ||
+        (location.port == '8080');
     if (is_server)
         $('#DEVICE_NAME').addClass('hidden');
     else
