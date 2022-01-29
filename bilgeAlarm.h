@@ -14,6 +14,9 @@
     // includes LEDs, DEMO_MODE
 #define HAS_LCD_LINE_VALUES  0
 
+#define BILGE_POWER          1
+
+
 #define DEFAULT_LED_BRIGHT        10
 #define DEFAULT_EXT_LED_BRIGHT    60
 
@@ -59,6 +62,15 @@
 #define ID_NUM_LAST_HOUR    "NUM_LAST_HOUR"
 #define ID_NUM_LAST_DAY     "NUM_LAST_DAY"
 #define ID_NUM_LAST_WEEK    "NUM_LAST_WEEK"
+
+// power
+
+#if BILGE_POWER
+    #define ID_POWER_12V    "POWER_12V"         // float - displayed 12.1 volts
+    #define ID_POWER_5V     "POWER_5V"          // float - displayed 5.1 volts
+    #define ID_CALIB_12V    "CALIB_12V"         // int - calib/1000
+    #define ID_CALIB_5V     "CALIB_5V"          // int - calib/1000
+#endif
 
 // commands
 
@@ -219,6 +231,11 @@ private:
     static int  _relay_debounce;
     static int  _sw_threshold;
 
+    static float _power_12v;
+    static float _power_5v;
+    static int   _calib_12v;
+    static int   _calib_5v;
+
     static bool _FORCE_RELAY;
 
     #if HAS_LCD_LINE_VALUES
@@ -244,6 +261,7 @@ private:
     void stateMachine();
     void publishState();
     static void stateTask(void *param);
+    void checkPower();
 
     static void setState(uint32_t state);
     static void addState(uint32_t state);

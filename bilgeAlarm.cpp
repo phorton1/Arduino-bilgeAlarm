@@ -61,21 +61,19 @@ static valueIdType dash_items[] = {
     ID_NUM_LAST_HOUR,
     ID_NUM_LAST_DAY,
     ID_NUM_LAST_WEEK,
+    ID_SUPPRESS,
+    ID_CLEAR_ERROR,
+    ID_CLEAR_HISTORY,
+    ID_POWER_12V,
+    ID_POWER_5V,
     ID_HISTORY_LINK,
     ID_SINCE_LAST_RUN,
     ID_TIME_LAST_RUN,
     ID_DUR_LAST_RUN,
-    ID_SUPPRESS,
-    ID_CLEAR_ERROR,
-    ID_CLEAR_HISTORY,
     ID_DISABLED,
 #if HAS_LCD_LINE_VALUES
     ID_LCD_LINE1,
     ID_LCD_LINE2,
-#endif
-#ifdef WITH_POWER
-    ID_DEVICE_VOLTS,
-    ID_DEVICE_AMPS,
 #endif
     ID_FORCE_RELAY,
 #if TEST_VERSION
@@ -106,6 +104,8 @@ static valueIdType config_items[] = {
     ID_EXT_LED_BRIGHT,
     ID_BACKLIGHT_SECS,
     ID_MENU_SECS,
+    ID_CALIB_12V,
+    ID_CALIB_5V,
     ID_SENSE_MILLIS,
     ID_PUMP_DEBOUNCE,
     ID_RELAY_DEBOUNCE,
@@ -187,6 +187,11 @@ const valDescriptor bilgeAlarm::m_bilge_values[] =
 
     { ID_FORCE_RELAY,      VALUE_TYPE_BOOL,     VALUE_STORE_TOPIC,    VALUE_STYLE_NONE,       (void *) &_FORCE_RELAY,    (void *) onForceRelay },
 
+    { ID_POWER_12V,        VALUE_TYPE_FLOAT,    VALUE_STORE_PUB,      VALUE_STYLE_READONLY,   (void *) &_power_12v,       NULL,   { .float_range = { 0.00, -50.00, 50.00 }} },
+    { ID_POWER_5V,         VALUE_TYPE_FLOAT,    VALUE_STORE_PUB,      VALUE_STYLE_READONLY,   (void *) &_power_5v,        NULL,   { .float_range = { 0.00, -300.00, 300.00 }} },
+    { ID_CALIB_12V,        VALUE_TYPE_INT,      VALUE_STORE_PREF,     VALUE_STYLE_NONE,       (void *) &_calib_12v,       NULL,   { .int_range = { 1000,     500,  1500}} },
+    { ID_CALIB_5V,         VALUE_TYPE_INT,      VALUE_STORE_PREF,     VALUE_STYLE_NONE,       (void *) &_calib_5v,        NULL,   { .int_range = { 1000,     500,  1500}} },
+
 #if HAS_LCD_LINE_VALUES
     { ID_LCD_LINE1,        VALUE_TYPE_STRING,   VALUE_STORE_TOPIC,    VALUE_STYLE_LONG,       (void *) &_lcd_line1,      (void *) onLcdLine },
     { ID_LCD_LINE2,        VALUE_TYPE_STRING,   VALUE_STORE_TOPIC,    VALUE_STYLE_LONG,       (void *) &_lcd_line2,      (void *) onLcdLine },
@@ -235,6 +240,11 @@ int  bilgeAlarm::_sense_millis;
 int  bilgeAlarm::_pump_debounce;
 int  bilgeAlarm::_relay_debounce;
 int  bilgeAlarm::_sw_threshold;
+
+float bilgeAlarm::_power_12v;
+float bilgeAlarm::_power_5v;
+int   bilgeAlarm::_calib_12v;
+int   bilgeAlarm::_calib_5v;
 
 bool bilgeAlarm::_FORCE_RELAY;
 
@@ -1053,6 +1063,121 @@ void bilgeAlarm::publishState()
     }
 }
 
+
+
+//-----------------------------------
+// power stuff
+//-----------------------------------
+#include <esp_adc_cal.h>
+
+#define VOLT_OFFSET_12V  0.00
+#define VOLT_OFFSET_5V   -0.05
+
+#define DIVIDER_RATIO_12V    ((4760.0 + 1000.0)/1000.0)       // (R1 + R2)/R2   ~5.6, so 3.3V==18.5V               (mesasured but wrong supply)
+    // As it stands right now, with no offsets,
+    // the display is matching the power supply pretty well
+    // power supply      multi meter      values
+    //    12.9             12.78         12.9
+    //    11.5             11.36         11.5
+    // The voltage will fluctuate pretty wildly esp in test harness
+    // with alarm, relay, etc.
+
+#define DIVIDER_RATIO_5V     ((10000.0 + 10000.0)/10000.0)    // (R1 + R2)/R2   ~2, so 3.3V==6.6V (we need 0..5)   (unmeasured)                                    ))
+    // Measuring 5.03 with multi-meter while displaying 5.08 == 5.1
+    // so I subtract an offset of 0.05
+
+#define NUM_VOLT_SAMPLES     100
+#define CHECK_POWER_INTERVAL 100
+    // take a samples and
+    // publish new value every so often
+
+
+int sample_5v;
+int sample_12v;
+int sample_counter;
+
+
+static void getPower(bool v5, valueIdType id, int val, float cur, int calib)
+{
+    esp_adc_cal_characteristics_t adc_chars;
+    esp_adc_cal_characterize(ADC_UNIT_1, ADC_ATTEN_DB_11, ADC_WIDTH_BIT_12, 1200, &adc_chars);
+        // prh dunno what it does, but it's way better than analogRead()/4096 * 3.3V
+        // The 1100 is from https://deepbluembedded.com/esp32-adc-tutorial-read-analog-voltage-arduino/
+        // The constant does not seem to do anything
+    uint32_t raw_millis = esp_adc_cal_raw_to_voltage(val, &adc_chars);
+    float raw_volts = (float) raw_millis/1000.0;
+
+    // throw in fixed ratios and offsets
+
+    float undivided_volts = raw_volts * (v5 ? DIVIDER_RATIO_5V : DIVIDER_RATIO_12V);
+    float final_volts = undivided_volts + (v5 ? VOLT_OFFSET_5V : VOLT_OFFSET_12V);
+
+    // throw in parameterized ratio
+
+    float user_ratio = calib;
+    user_ratio /= 1000.00;
+    final_volts *= user_ratio;
+
+    // round to 1 decimal place
+
+    uint32_t rounded = 1000 * final_volts;
+    rounded = (rounded + 50) / 100;
+
+    float final = rounded;
+    final /= 10;
+
+    #if 0   // DEBUG_POWER
+        LOGD("%s val=%d   millis=%d   raw==%-2.3f   undiv=%-2.3f   volts=%-2.3f  rounded=%d  final=%-2.3f",
+                (v5 ? "CPU" : "MAIN"),
+                val,
+                raw_millis,
+                raw_volts,
+                undivided_volts,
+                final_volts,
+                rounded,
+                final);
+    #endif
+
+    if (final != cur)
+    {
+        bilge_alarm->setFloat(id,final);
+    }
+}
+
+
+void bilgeAlarm::checkPower()
+{
+    uint32_t now = millis();
+    static uint32_t check_power_time = 0;
+    if (!check_power_time || now > check_power_time + CHECK_POWER_INTERVAL)
+    {
+        check_power_time = now;
+
+        // don't check the power if the alarm or relay is on
+
+        if (!_alarm_state &&
+            !m_publish_state.alarm_state &&
+            !(_state & STATE_RELAY_ON) &&
+            !(m_publish_state.state & STATE_RELAY_ON))
+        {
+            sample_12v += analogRead(PIN_12V_IN);
+            sample_5v += analogRead(PIN_5V_IN);
+            sample_counter++;
+            if (sample_counter == NUM_VOLT_SAMPLES)
+            {
+                sample_12v /= NUM_VOLT_SAMPLES;
+                sample_5v /= NUM_VOLT_SAMPLES;
+                getPower(0,ID_POWER_12V,sample_12v,_power_12v,_calib_12v);
+                getPower(1,ID_POWER_5V,sample_5v,_power_5v,_calib_5v);
+                sample_counter = 0;
+                sample_12v = 0;
+                sample_5v = 0;
+            }
+        }
+    }
+}
+
+
 //-----------------------------------
 // loop()
 //-----------------------------------
@@ -1061,5 +1186,6 @@ void bilgeAlarm::loop()
 {
     myIOTDevice::loop();
     bilge_alarm->publishState();
+    bilge_alarm->checkPower();
     ui_screen->loop();
 }

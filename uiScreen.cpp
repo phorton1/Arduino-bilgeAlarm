@@ -77,27 +77,22 @@
 
 #define SCREEN_MAIN             4
 #define SCREEN_WIFI             5
-#define SCREEN_RELAY            6
-#define SCREEN_SELFTEST         7
-#define SCREEN_CLEAR_HISTORY    8
-#define SCREEN_REBOOT           9
-#define SCREEN_FACTORY_RESET    10
-#define LAST_MAIN_SCREEN        10
+#define SCREEN_POWER            6
+#define SCREEN_RELAY            7
+#define SCREEN_SELFTEST         8
+#define SCREEN_CLEAR_HISTORY    9
+#define SCREEN_REBOOT           10
+#define SCREEN_FACTORY_RESET    11
+#define LAST_MAIN_SCREEN        11
 
-#define SCREEN_CONFIRM          11
+#define SCREEN_CONFIRM          12
 
-#define SCREEN_HISTORY_BASE     12
-#define SCREEN_HISTORY          13
+#define SCREEN_HISTORY_BASE     13
+#define SCREEN_HISTORY          14
 
-#define SCREEN_CONFIG_BASE      14
-#define SCREEN_CONFIG           15
+#define SCREEN_CONFIG_BASE      15
+#define SCREEN_CONFIG           16
 
-
-#ifdef WITH_POWER
-    // to MAIN_MODE
-    ID_DEVICE_VOLTS,
-    ID_DEVICE_AMPS,
-#endif
 
 const char *screens[] = {
 
@@ -108,19 +103,20 @@ const char *screens[] = {
 
     "HOUR %-3d DAY %-3d",   "%-8s%8s",              // 4
     "%-16s",                "%16s",                 // 5
-    "PRIMARY PUMP",         "RELAY        %-3S",    // 6
-    "SELF TEST",            "         PERFORM",     // 7
-    "CLEAR HISTORY",        "         PERFORM",     // 8
-    "REBOOT",               "         PERFORM",     // 9
-    "FACTORY RESET",        "         PERFORM",     // 10
+    "MAIN       %4sV",      "CPU        %4sV",      // 6
+    "PRIMARY PUMP",         "RELAY        %-3S",    // 7
+    "SELF TEST",            "         PERFORM",     // 8
+    "CLEAR HISTORY",        "         PERFORM",     // 9
+    "REBOOT",               "         PERFORM",     // 10
+    "FACTORY RESET",        "         PERFORM",     // 11
 
-    "CONFIRM",              "%S",                   // 11
+    "CONFIRM",              "%S",                   // 12
 
-    "HISTORY %8d",          "BACK  NEXT  PREV",     // 12
-    "%s %s",                "%-12s %3d",            // 13
+    "HISTORY %8d",          "BACK  NEXT  PREV",     // 13
+    "%s %s",                "%-12s %3d",            // 14
 
-    "CONFIG SETTINGS",      "NEXT",                 // 14
-    "%s",                   "%16s",                 // 15
+    "CONFIG SETTINGS",      "NEXT",                 // 15
+    "%s",                   "%16s",                 // 16
 };
 
 
@@ -152,6 +148,8 @@ static valueIdType config_mode_ids[] = {
     ID_DEVICE_VERSION,
     ID_DEVICE_UUID,
 
+    ID_CALIB_12V,
+    ID_CALIB_5V,
     ID_SENSE_MILLIS,
     ID_PUMP_DEBOUNCE,
     ID_RELAY_DEBOUNCE,
@@ -539,6 +537,13 @@ void uiScreen::onValueChanged(const myIOTValue *value, valueStore from)
             setScreen(m_screen_num);
             return;
         }
+        if (m_screen_num == SCREEN_POWER && (
+            !strcmp(id,ID_POWER_12V) ||
+            !strcmp(id,ID_POWER_5V)))
+        {
+            setScreen(m_screen_num);
+            return;
+        }
     }
 
     // othersise, ignore changes coming from
@@ -784,6 +789,16 @@ void uiScreen::setScreen(int screen_num)
                 mode == WIFI_MODE_APSTA ? "WIFI_AP_STA" : "NO_WIFI";
             print_lcd(0,n0,mode_str);
             print_lcd(1,n1,bilge_alarm->getString(ID_DEVICE_IP).c_str());
+            break;
+        }
+
+        case SCREEN_POWER:
+        {
+            char buf[LCD_BUF_LEN] = "";
+            sprintf(buf,"%0.1f",bilge_alarm->getFloat(ID_POWER_12V));
+            print_lcd(0,n0,buf);
+            sprintf(buf,"%0.1f",bilge_alarm->getFloat(ID_POWER_5V));
+            print_lcd(1,n1,buf);
             break;
         }
 
