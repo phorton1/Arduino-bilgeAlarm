@@ -40,6 +40,18 @@
 
 #define DEFAULT_RUN_EMERGENCY       30         // off,secs
 
+#define DEFAULT_SW_THRESHOLD        900        // working value for analogRead() of pump switches
+    // There was an issue that when the Alarm came on due to digitalRead,
+    // it drew enough power (from the test harness) that the PUMP2_ON digital
+    // read subsequently returned 0, thus causing the system to cycle through
+    // pump ON/OFF every few seconds  This is likely excerbated by my voltage
+    // divider being a little too protective.   Changing it to analogRead with
+    // an agressive (and probably to-become parameterized threshold) seems to
+    // have worked around the problem, although you can see the whole system
+    // is being starved of power through the process.
+
+
+
 
 // what shows up on the "dashboard" UI tab
 
@@ -90,13 +102,14 @@ static valueIdType config_items[] = {
     ID_EXTRA_RUN_TIME,
     ID_EXTRA_RUN_MODE,
     ID_EXTRA_RUN_DELAY,
-    ID_SENSE_MILLIS,
-    ID_PUMP_DEBOUNCE,
-    ID_RELAY_DEBOUNCE,
     ID_LED_BRIGHT,
     ID_EXT_LED_BRIGHT,
     ID_BACKLIGHT_SECS,
     ID_MENU_SECS,
+    ID_SENSE_MILLIS,
+    ID_PUMP_DEBOUNCE,
+    ID_RELAY_DEBOUNCE,
+    ID_SW_THRESHOLD,
     0
 };
 
@@ -164,6 +177,9 @@ const valDescriptor bilgeAlarm::m_bilge_values[] =
     { ID_SENSE_MILLIS,     VALUE_TYPE_INT,      VALUE_STORE_PREF,     VALUE_STYLE_NONE,       (void *) &_sense_millis,   NULL,  { .int_range = { DEFAULT_SENSE_MILLIS,      5,  30000}} },
     { ID_PUMP_DEBOUNCE,    VALUE_TYPE_INT,      VALUE_STORE_PREF,     VALUE_STYLE_NONE,       (void *) &_pump_debounce,  NULL,  { .int_range = { DEFAULT_PUMP_DEBOUNCE,     5,  30000}} },
     { ID_RELAY_DEBOUNCE,   VALUE_TYPE_INT,      VALUE_STORE_PREF,     VALUE_STYLE_NONE,       (void *) &_relay_debounce, NULL,  { .int_range = { DEFAULT_RELAY_DEBOUNCE,    5,  30000}} },
+    { ID_SW_THRESHOLD,     VALUE_TYPE_INT,      VALUE_STORE_PREF,     VALUE_STYLE_NONE,       (void *) &_sw_threshold,   NULL,  { .int_range = { DEFAULT_SW_THRESHOLD,      5,  4095}} },
+
+
     { ID_BACKLIGHT_SECS,   VALUE_TYPE_INT,      VALUE_STORE_PREF,     VALUE_STYLE_OFF_ZERO,   (void *) &_backlight_secs, NULL,  { .int_range = { DEFAULT_BACKLIGHT_SECS,    MIN_BACKLIGHT_SECS, 3600}}  },
     { ID_MENU_SECS,        VALUE_TYPE_INT,      VALUE_STORE_PREF,     VALUE_STYLE_OFF_ZERO,   (void *) &_menu_secs,      NULL,  { .int_range = { DEFAULT_MENU_SECS,         MIN_MENU_SECS,      3600}}  },
     { ID_LED_BRIGHT,       VALUE_TYPE_INT,      VALUE_STORE_PREF,     VALUE_STYLE_OFF_ZERO,   NULL,                      (void *) onLedBright, { .int_range = { DEFAULT_LED_BRIGHT, 0, 255}}  },
@@ -218,6 +234,7 @@ int  bilgeAlarm::_extra_run_delay;
 int  bilgeAlarm::_sense_millis;
 int  bilgeAlarm::_pump_debounce;
 int  bilgeAlarm::_relay_debounce;
+int  bilgeAlarm::_sw_threshold;
 
 bool bilgeAlarm::_FORCE_RELAY;
 
@@ -589,18 +606,6 @@ void bilgeAlarm::stateTask(void *param)
 
 
 
-// There was an issue that when the Alarm came on due to digitalRead,
-// it drew enough power (from the test harness) that the PUMP2_ON digital
-// read subsequently returned 0, thus causing the system to cycle through
-// pump ON/OFF every few seconds  This is likely excerbated by my voltage
-// divider being a little too protective.   Changing it to analogRead with
-// an agressive (and probably to-become parameterized threshold) seems to
-// have worked around the problem, although you can see the whole system
-// is being starved of power through the process.
-
-#define ON_THRESHOLD 900          // 0..4096
-
-
 void bilgeAlarm::stateMachine()
     // THIS IS THE STATE MACHINE FOR THE BILGE ALARM
     // DO NOT CALL setXX directly or indirectly from this!!!
@@ -621,8 +626,8 @@ void bilgeAlarm::stateMachine()
     #else
         raw1 = analogRead(PIN_PUMP1_ON);
         raw2 = analogRead(PIN_PUMP2_ON);
-        bool pump1_on = raw1 > ON_THRESHOLD ? 1 : 0;
-        bool pump2_on = raw2 > ON_THRESHOLD ? 1 : 0;
+        bool pump1_on = raw1 > _sw_threshold ? 1 : 0;
+        bool pump2_on = raw2 > _sw_threshold ? 1 : 0;
     #endif
 
     bool was_on1 = _state & STATE_PUMP1_ON;

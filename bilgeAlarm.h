@@ -96,6 +96,7 @@
     // The RELAY_DEBOUNCE time is how long after we turn the relay off before we check the pump switch again.
     //    The relay will energize the pump switch and due to inductance in the motor, the switch may appear on
     //    when it is not really on for some period of time as the motor spins down.
+#define ID_SW_THRESHOLD     "SW_THRESHOLD"          // analogRead() threshold for pump switches - default==900, see logfile if this value needs to be changed
 #define ID_RUN_EMERGENCY    "RUN_EMERGENCY"         // off,secs - how long to turn on the relay as long as the emergency switch turns on
     // This will run the main pump if the emergency pump turns on, and continue running it for N more seconds than the emergency pump
 #define ID_LED_BRIGHT       "LED_BRIGHT"            // 0..255 main ws2812 LED brightness
@@ -216,6 +217,7 @@ private:
     static int  _sense_millis;
     static int  _pump_debounce;
     static int  _relay_debounce;
+    static int  _sw_threshold;
 
     static bool _FORCE_RELAY;
 

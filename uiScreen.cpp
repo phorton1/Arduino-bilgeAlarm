@@ -42,7 +42,7 @@
 #define MIN_BACKLIGHT       15
 #define MIN_MENUTIMEOUT     15
 
-#define DEBUG_SCREEN  0
+#define DEBUG_SCREEN  1
 
 
 #if DEBUG_SCREEN
@@ -68,7 +68,6 @@
 #define MENU_MODE_MAIN      0     // main mode - main screen and commands
 #define MENU_MODE_HISTORY   1     // stats mode - cycle through history if any
 #define MENU_MODE_CONFIG    2     // config mode - modify config options
-#define MENU_MODE_DEVICE    3     // device_mode - about, system config, etc
 
 
 #define SCREEN_ERROR            0
@@ -77,46 +76,51 @@
 #define SCREEN_ALARM_CLEARED    3
 
 #define SCREEN_MAIN             4
-#define SCREEN_RELAY            5
-#define SCREEN_SELFTEST         6
-#define SCREEN_CLEAR_HISTORY    7
-#define SCREEN_REBOOT           8
-#define SCREEN_FACTORY_RESET    9
-#define LAST_MAIN_SCREEN        9
+#define SCREEN_WIFI             5
+#define SCREEN_RELAY            6
+#define SCREEN_SELFTEST         7
+#define SCREEN_CLEAR_HISTORY    8
+#define SCREEN_REBOOT           9
+#define SCREEN_FACTORY_RESET    10
+#define LAST_MAIN_SCREEN        10
 
-#define SCREEN_CONFIRM          10
+#define SCREEN_CONFIRM          11
 
-#define SCREEN_HISTORY_BASE     11
-#define SCREEN_HISTORY          12
+#define SCREEN_HISTORY_BASE     12
+#define SCREEN_HISTORY          13
 
-#define SCREEN_CONFIG_BASE      13
-#define SCREEN_CONFIG           14
-#define SCREEN_DEVICE_BASE      15
-#define SCREEN_DEVICE           16
+#define SCREEN_CONFIG_BASE      14
+#define SCREEN_CONFIG           15
+
+
+#ifdef WITH_POWER
+    // to MAIN_MODE
+    ID_DEVICE_VOLTS,
+    ID_DEVICE_AMPS,
+#endif
 
 const char *screens[] = {
 
-    "%S",                   "%S",                   // 0
+    "%s",                   "%s",                   // 0
     "PRESS ANY KEY TO",     "SILENCE ALARM",        // 1
     "PRESS ANY KEY TO",     "CLEAR ALARM",          // 2
     "ALARM",                "CLEARED",              // 3
 
     "HOUR %-3d DAY %-3d",   "%-8s%8s",              // 4
-    "PRIMARY PUMP",         "RELAY        %-3S",    // 5
-    "SELF TEST",            "         PERFORM",     // 6
-    "CLEAR HISTORY",        "         PERFORM",     // 7
-    "REBOOT",               "         PERFORM",     // 8
-    "FACTORY RESET",        "         PERFORM",     // 9
+    "%-16s",                "%16s",                 // 5
+    "PRIMARY PUMP",         "RELAY        %-3S",    // 6
+    "SELF TEST",            "         PERFORM",     // 7
+    "CLEAR HISTORY",        "         PERFORM",     // 8
+    "REBOOT",               "         PERFORM",     // 9
+    "FACTORY RESET",        "         PERFORM",     // 10
 
-    "CONFIRM",              "%S",                   // 10
+    "CONFIRM",              "%S",                   // 11
 
-    "HISTORY %8d",          "BACK  NEXT  PREV",     // 11
-    "%s %s",                "%-12s %3d",            // 12
+    "HISTORY %8d",          "BACK  NEXT  PREV",     // 12
+    "%s %s",                "%-12s %3d",            // 13
 
-    "CONFIG SETTINGS",      "NEXT",                 // 13
-    "%s",                   "%16s",                 // 14
-    "DEVICE SETTINGS",      "NEXT",                 // 15
-    "%s",                   "%16s",                 // 16
+    "CONFIG SETTINGS",      "NEXT",                 // 14
+    "%s",                   "%16s",                 // 15
 };
 
 
@@ -126,6 +130,7 @@ static valueIdType config_mode_ids[] = {
 #if TEST_VERSION
     ID_DEMO_MODE,
 #endif
+
     ID_DISABLED,
     ID_ERR_RUN_TIME,
     ID_CRIT_RUN_TIME,
@@ -135,21 +140,6 @@ static valueIdType config_mode_ids[] = {
     ID_EXTRA_RUN_TIME,
     ID_EXTRA_RUN_MODE,
     ID_EXTRA_RUN_DELAY,
-    ID_SENSE_MILLIS,
-    ID_PUMP_DEBOUNCE,
-    ID_RELAY_DEBOUNCE,
-
-};
-
-
-// things that show up in CONFIG_MODE
-
-static valueIdType device_mode_ids[] = {
-    ID_DEVICE_IP,
-#ifdef WITH_POWER
-    ID_DEVICE_VOLTS,
-    ID_DEVICE_AMPS,
-#endif
 
     ID_BACKLIGHT_SECS,      // from bilgeAlarm
     ID_MENU_SECS,           // from bilgeAlarm
@@ -161,6 +151,11 @@ static valueIdType device_mode_ids[] = {
     ID_DEVICE_TYPE,
     ID_DEVICE_VERSION,
     ID_DEVICE_UUID,
+
+    ID_SENSE_MILLIS,
+    ID_PUMP_DEBOUNCE,
+    ID_RELAY_DEBOUNCE,
+    ID_SW_THRESHOLD,
 
 };
 
@@ -660,20 +655,7 @@ void uiScreen::setScreen(int screen_num)
 
     // handle MODE and semi-mode changes
 
-    if (screen_num >= SCREEN_DEVICE_BASE)
-    {
-        m_menu_mode = MENU_MODE_DEVICE;
-        m_value_ids = device_mode_ids;
-        m_value_count = sizeof(device_mode_ids)/sizeof(valueIdType *);
-        if (screen_num == SCREEN_DEVICE_BASE)
-        {
-            m_value_num = 0;
-            ui_buttons->setRepeatMask(0);
-        }
-        else
-            ui_buttons->setRepeatMask(6);
-    }
-    else if (screen_num >= SCREEN_CONFIG_BASE)
+    if (screen_num >= SCREEN_CONFIG_BASE)
     {
         m_menu_mode = MENU_MODE_CONFIG;
         m_value_ids = config_mode_ids;
@@ -719,7 +701,6 @@ void uiScreen::setScreen(int screen_num)
         // screens with no params
 
         case SCREEN_CONFIG_BASE:
-        case SCREEN_DEVICE_BASE:
         case SCREEN_SELFTEST:
         case SCREEN_CLEAR_HISTORY:
         case SCREEN_REBOOT:
@@ -793,6 +774,18 @@ void uiScreen::setScreen(int screen_num)
         }
 
         // COMMANDS
+
+        case SCREEN_WIFI:
+        {
+            iotConnectStatus_t mode = bilge_alarm->getConnectStatus();
+            const char *mode_str =
+                mode == WIFI_MODE_AP ? "WIFI_AP" :
+                mode == WIFI_MODE_STA ? "WIFI_STA" :
+                mode == WIFI_MODE_APSTA ? "WIFI_AP_STA" : "NO_WIFI";
+            print_lcd(0,n0,mode_str);
+            print_lcd(1,n1,bilge_alarm->getString(ID_DEVICE_IP).c_str());
+            break;
+        }
 
         case SCREEN_RELAY:
             print_lcd(0,n0);
@@ -958,12 +951,7 @@ bool uiScreen::onButton(int button_num, int event_type)
         {
             if (button_num == 1)
             {
-                if (event_type == BUTTON_TYPE_LONG_CLICK)
-                {
-                    setScreen(SCREEN_DEVICE_BASE);
-                    return true;
-                }
-                else if (event_type == BUTTON_TYPE_CLICK)
+                if (event_type == BUTTON_TYPE_CLICK)
                 {
                     if (m_screen_num == SCREEN_CONFIRM)
                         setScreen(m_prev_screen);
@@ -1072,7 +1060,7 @@ bool uiScreen::onButton(int button_num, int event_type)
     // CONFIG_MODE
     //---------------------------
 
-    else if (m_menu_mode == MENU_MODE_CONFIG)
+    else // if (m_menu_mode == MENU_MODE_CONFIG)
     {
         if (m_screen_num == SCREEN_CONFIG_BASE &&
             event_type == BUTTON_TYPE_LONG_CLICK)
@@ -1106,49 +1094,6 @@ bool uiScreen::onButton(int button_num, int event_type)
             }
         }
         else if (m_screen_num == SCREEN_CONFIG)
-        {
-            return handleValue(button_num,event_type);
-        }
-    }
-
-    //------------------------
-    // DEVICE_MODE
-    //------------------------
-
-    else // if (m_menu_mode == MENU_MODE_DEVICE)
-    {
-        if (m_screen_num == SCREEN_DEVICE_BASE &&
-            event_type == BUTTON_TYPE_LONG_CLICK)
-        {
-            setScreen(SCREEN_MAIN);
-            return true;
-        }
-        else if (button_num == 0)
-        {
-            if (event_type == BUTTON_TYPE_LONG_CLICK)
-            {
-                setScreen(SCREEN_MAIN);
-                return true;
-            }
-            if (event_type == BUTTON_TYPE_CLICK)
-            {
-                if (m_screen_num == SCREEN_DEVICE_BASE)
-                {
-                    setScreen(SCREEN_DEVICE);
-                }
-                else if (m_value_num < m_value_count - 1)
-                {
-                    m_value_num++;
-                    setScreen(SCREEN_DEVICE);
-                }
-                else
-                {
-                    setScreen(SCREEN_DEVICE_BASE);
-                }
-                return true;
-            }
-        }
-        else if (m_screen_num == SCREEN_DEVICE)
         {
             return handleValue(button_num,event_type);
         }
