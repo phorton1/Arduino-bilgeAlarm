@@ -588,6 +588,19 @@ void bilgeAlarm::stateTask(void *param)
 }
 
 
+
+// There was an issue that when the Alarm came on due to digitalRead,
+// it drew enough power (from the test harness) that the PUMP2_ON digital
+// read subsequently returned 0, thus causing the system to cycle through
+// pump ON/OFF every few seconds  This is likely excerbated by my voltage
+// divider being a little too protective.   Changing it to analogRead with
+// an agressive (and probably to-become parameterized threshold) seems to
+// have worked around the problem, although you can see the whole system
+// is being starved of power through the process.
+
+#define ON_THRESHOLD 900          // 0..4096
+
+
 void bilgeAlarm::stateMachine()
     // THIS IS THE STATE MACHINE FOR THE BILGE ALARM
     // DO NOT CALL setXX directly or indirectly from this!!!
@@ -599,8 +612,19 @@ void bilgeAlarm::stateMachine()
     uint32_t now = millis();
     time_t time_now = time(NULL);
 
-    bool pump1_on = digitalRead(PIN_PUMP1_ON);
-    bool pump2_on = digitalRead(PIN_PUMP2_ON);
+    int raw1 = 0;
+    int raw2 = 0;
+
+    #if 0
+        bool pump1_on = digitalRead(PIN_PUMP1_ON);
+        bool pump2_on = digitalRead(PIN_PUMP2_ON);
+    #else
+        raw1 = analogRead(PIN_PUMP1_ON);
+        raw2 = analogRead(PIN_PUMP2_ON);
+        bool pump1_on = raw1 > ON_THRESHOLD ? 1 : 0;
+        bool pump2_on = raw2 > ON_THRESHOLD ? 1 : 0;
+    #endif
+
     bool was_on1 = _state & STATE_PUMP1_ON;
     bool was_on2 = _state & STATE_PUMP2_ON;
     bool pump1_valid = now > m_pump1_debounce_time;
@@ -635,7 +659,7 @@ void bilgeAlarm::stateMachine()
 
     if (pump2_valid && was_on2 != pump2_on)
     {
-        LOGI("m_pump2_on=%d",pump2_on);
+        LOGI("m_pump2_on=%d  raw2=%d",pump2_on,raw2);
         m_pump2_debounce_time = now  + _pump_debounce;
 
         if (pump2_on)
@@ -663,7 +687,7 @@ void bilgeAlarm::stateMachine()
                 {
                     LOGU("ALARM - EMERGENCY PUMP ON!!");
                 }
-                if (!emergency_relay_on)
+                if (_run_emergency && !emergency_relay_on)
                 {
                     LOGU("EMERGENCY RELAY ON");
                     emergency_relay_on = 1;
@@ -696,7 +720,7 @@ void bilgeAlarm::stateMachine()
 
     if (pump1_valid && was_on1 != pump1_on)
     {
-        LOGI("m_pump1_on=%d",pump1_on);
+        LOGI("m_pump1_on=%d  raw1=%d",pump1_on,raw1);
         m_pump1_debounce_time = now + _pump_debounce;
 
         if (pump1_on)
