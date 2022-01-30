@@ -139,17 +139,6 @@ F 3 "~" H 3500 2500 50  0001 C CNN
 	1    0    0    -1  
 $EndComp
 $Comp
-L LED:WS2812B D5
-U 1 1 61F68394
-P 3300 3500
-F 0 "D5" V 3346 3156 50  0000 R CNN
-F 1 "WS2812B" V 3255 3156 50  0000 R CNN
-F 2 "LED_SMD:LED_WS2812B_PLCC4_5.0x5.0mm_P3.2mm" H 3350 3200 50  0001 L TNN
-F 3 "https://cdn-shop.adafruit.com/datasheets/WS2812B.pdf" H 3400 3125 50  0001 L TNN
-	1    3300 3500
-	0    -1   -1   0   
-$EndComp
-$Comp
 L Connector_Generic:Conn_01x01 J3
 U 1 1 61F68801
 P 3500 2400
