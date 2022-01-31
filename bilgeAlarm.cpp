@@ -153,7 +153,7 @@ const valDescriptor bilgeAlarm::m_bilge_values[] =
 
     { ID_SUPPRESS,         VALUE_TYPE_COMMAND,  VALUE_STORE_MQTT_SUB, VALUE_STYLE_NONE,       NULL,                     (void *) suppressAlarm },
     { ID_CLEAR_ERROR,      VALUE_TYPE_COMMAND,  VALUE_STORE_MQTT_SUB, VALUE_STYLE_NONE,       NULL,                     (void *) clearError },
-    { ID_CLEAR_HISTORY,    VALUE_TYPE_COMMAND,  VALUE_STORE_MQTT_SUB, VALUE_STYLE_NONE,       NULL,                     (void *) clearHistory },
+    { ID_CLEAR_HISTORY,    VALUE_TYPE_COMMAND,  VALUE_STORE_MQTT_SUB, VALUE_STYLE_VERIFY,       NULL,                     (void *) clearHistory },
 
     { ID_STATE,            VALUE_TYPE_BENUM,    VALUE_STORE_PUB,      VALUE_STYLE_READONLY,   (void *) &m_publish_state.state,         NULL,   { .enum_range = { 0, systemStates }} },
     { ID_ALARM_STATE,      VALUE_TYPE_BENUM,    VALUE_STORE_TOPIC,    VALUE_STYLE_LONG,       (void *) &m_publish_state.alarm_state,   NULL,   { .enum_range = { 0, alarmStates }} },
@@ -319,11 +319,11 @@ void bilgeAlarm::setup()
     // ui_screen =
     new uiScreen(button_pins);
 
-    showIncSetupPixel();    // 1
+    showIncSetupPixel();    // 3
 
     myIOTDevice::setup();
 
-    showIncSetupPixel();    // 3
+
 
     setPixelBright(0,getInt(ID_LED_BRIGHT));
     setPixelBright(1,getInt(ID_EXT_LED_BRIGHT));

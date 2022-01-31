@@ -139,6 +139,8 @@ static valueIdType config_mode_ids[] = {
 
     ID_BACKLIGHT_SECS,      // from bilgeAlarm
     ID_MENU_SECS,           // from bilgeAlarm
+    ID_LED_BRIGHT,
+    ID_EXT_LED_BRIGHT,
 
     ID_DEBUG_LEVEL,
     ID_LOG_LEVEL,
@@ -236,9 +238,11 @@ uiScreen::uiScreen(int *button_pins)
     lcd.init();                      // initialize the lcd
     lcd.backlight();
 
-    lcd.setCursor(0,0);
-    lcd.print(bootReason());
-    delay(2000);
+    #if 0
+        lcd.setCursor(0,0);
+        lcd.print(bootReason());
+        delay(2000);
+    #endif
 
     lcd.clear();
     lcd.setCursor(0,0);

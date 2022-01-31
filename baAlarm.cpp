@@ -160,7 +160,8 @@ static void alarmTask(void *param)
     vTaskDelay(500 / portTICK_PERIOD_MS);
     DBG_ALARM("starting alarmTask loop on core(%d)",xPortGetCoreID());
 
-    showIncSetupPixel();        // 5 (external)
+    showIncSetupPixel();        // 4
+
     vTaskDelay(500 / portTICK_PERIOD_MS);
     clearPixels();
     showPixels();

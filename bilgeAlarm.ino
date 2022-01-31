@@ -18,15 +18,15 @@
 
 void setup()
 {
+    initPixels();
+
     Serial.begin(115200);
     delay(1000);
-
-    initPixels();
 
     bilgeAlarm::setDeviceType(BILGE_ALARM);
     bilgeAlarm::setDeviceVersion(BILGE_ALARM_VERSION);
 
-    // init the SD Card in early derived device
+    // init the SD Card early in derived device
     // due to it's wonky SPI behavior, and so that
     // logfile can begin immediately.
 
@@ -40,6 +40,8 @@ void setup()
     LOGU("");
     LOGU("bilgeAlarm.ino setup() started on core(%d)",xPortGetCoreID());
 
+    showIncSetupPixel();    // 0
+
     #ifdef WITH_SD
     #ifdef INIT_SD_EARLY
         LOGD("sd_ok=%d",sd_ok);
@@ -49,7 +51,7 @@ void setup()
     bilge_alarm = new bilgeAlarm();
     bilge_alarm->setup();
 
-    showIncSetupPixel();    // 4 (external)
+
         // 1,2,3 is IOTDevice.
         // 4 is probably this one
         // and 5 is probably the alarmTask starting up
