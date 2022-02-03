@@ -10,7 +10,7 @@
 #define BILGE_ALARM_VERSION     "b0.05"
 
 
-#define TEST_VERSION         0
+#define DEMO_MODE         1
     // includes LEDs, DEMO_MODE
 #define HAS_LCD_LINE_VALUES  0
 
@@ -74,6 +74,7 @@
 
 // commands
 
+#define ID_SELFTEST         "SELF_TEST"             // user command to run self test
 #define ID_FORCE_RELAY      "FORCE_RELAY"           // the user command (switch) to force the relay on or off
 #define ID_SUPPRESS         "SUPPRESS_ALARM"        // the user command (button) to suppress the alarm sound
 #define ID_CLEAR_ERROR      "CLEAR_ERROR"           // the user command (button) to clear the current error
@@ -123,9 +124,8 @@
     #define ID_LCD_LINE1        "LCD_LINE1"
     #define ID_LCD_LINE2        "LCD_LINE2"
 #endif
-#if TEST_VERSION
+#if DEMO_MODE
     #define ID_ONBOARD_LED      "ONBOARD_LED"
-    #define ID_OTHER_LED        "OTHER_LED"
     #define ID_DEMO_MODE        "DEMO_MODE"
 #endif
 
@@ -196,6 +196,8 @@ public:
     static void clearError();
     static void suppressAlarm();
     static void clearHistory();
+    static void selfTest();
+    static bool inSelfTest()         { return m_in_self_test; }
 
 private:
 
@@ -242,9 +244,8 @@ private:
         static String _lcd_line1;
         static String _lcd_line2;
     #endif
-    #if TEST_VERSION
+    #if DEMO_MODE
         static bool _ONBOARD_LED;
-        static bool _OTHER_LED;
         static bool _DEMO_MODE;
     #endif
 
@@ -255,6 +256,7 @@ private:
     static uint32_t m_relay_delay_time;
     static uint32_t m_relay_time;
     static bool     m_suppress_next_after;
+    static bool     m_in_self_test;
 
     // methods
 
@@ -278,7 +280,7 @@ private:
     virtual String onCustomLink(const String &path) override;
     virtual void onInitRTCMemory() override;
 
-    #if TEST_VERSION
+    #if DEMO_MODE
         static void onLed(const myIOTValue *desc, bool val);
     #endif
     #if HAS_LCD_LINE_VALUES

@@ -76,9 +76,8 @@ static valueIdType dash_items[] = {
     ID_LCD_LINE2,
 #endif
     ID_FORCE_RELAY,
-#if TEST_VERSION
+#if DEMO_MODE
     ID_ONBOARD_LED,
-    ID_OTHER_LED,
     ID_DEMO_MODE,
 #endif
     ID_REBOOT,
@@ -88,9 +87,10 @@ static valueIdType dash_items[] = {
 // what shows up on the "device" UI tab
 
 static valueIdType config_items[] = {
-#if TEST_VERSION
+#if DEMO_MODE
     ID_DEMO_MODE,
 #endif
+    ID_SELFTEST,
     ID_DISABLED,
     ID_ERR_RUN_TIME,
     ID_CRIT_RUN_TIME,
@@ -151,9 +151,10 @@ const valDescriptor bilgeAlarm::m_bilge_values[] =
 {
     { ID_DEVICE_NAME,      VALUE_TYPE_STRING,   VALUE_STORE_PREF,     VALUE_STYLE_REQUIRED,   NULL,                     NULL,   BILGE_ALARM },        // override base class element
 
+    { ID_SELFTEST,         VALUE_TYPE_COMMAND,  VALUE_STORE_MQTT_SUB, VALUE_STYLE_NONE,       NULL,                     (void *) selfTest },
     { ID_SUPPRESS,         VALUE_TYPE_COMMAND,  VALUE_STORE_MQTT_SUB, VALUE_STYLE_NONE,       NULL,                     (void *) suppressAlarm },
     { ID_CLEAR_ERROR,      VALUE_TYPE_COMMAND,  VALUE_STORE_MQTT_SUB, VALUE_STYLE_NONE,       NULL,                     (void *) clearError },
-    { ID_CLEAR_HISTORY,    VALUE_TYPE_COMMAND,  VALUE_STORE_MQTT_SUB, VALUE_STYLE_VERIFY,       NULL,                     (void *) clearHistory },
+    { ID_CLEAR_HISTORY,    VALUE_TYPE_COMMAND,  VALUE_STORE_MQTT_SUB, VALUE_STYLE_VERIFY,     NULL,                     (void *) clearHistory },
 
     { ID_STATE,            VALUE_TYPE_BENUM,    VALUE_STORE_PUB,      VALUE_STYLE_READONLY,   (void *) &m_publish_state.state,         NULL,   { .enum_range = { 0, systemStates }} },
     { ID_ALARM_STATE,      VALUE_TYPE_BENUM,    VALUE_STORE_TOPIC,    VALUE_STYLE_LONG,       (void *) &m_publish_state.alarm_state,   NULL,   { .enum_range = { 0, alarmStates }} },
@@ -196,9 +197,8 @@ const valDescriptor bilgeAlarm::m_bilge_values[] =
     { ID_LCD_LINE1,        VALUE_TYPE_STRING,   VALUE_STORE_TOPIC,    VALUE_STYLE_LONG,       (void *) &_lcd_line1,      (void *) onLcdLine },
     { ID_LCD_LINE2,        VALUE_TYPE_STRING,   VALUE_STORE_TOPIC,    VALUE_STYLE_LONG,       (void *) &_lcd_line2,      (void *) onLcdLine },
 #endif
-#if TEST_VERSION
+#if DEMO_MODE
     { ID_ONBOARD_LED,      VALUE_TYPE_BOOL,     VALUE_STORE_TOPIC,    VALUE_STYLE_NONE,       (void *) &_ONBOARD_LED,    (void *) onLed, },
-    { ID_OTHER_LED,        VALUE_TYPE_BOOL,     VALUE_STORE_TOPIC,    VALUE_STYLE_NONE,       (void *) &_OTHER_LED,      (void *) onLed, },
     { ID_DEMO_MODE,        VALUE_TYPE_BOOL,     VALUE_STORE_PREF,     VALUE_STYLE_NONE,       (void *) &_DEMO_MODE,      },
 #endif
 
@@ -252,9 +252,8 @@ bool bilgeAlarm::_FORCE_RELAY;
     String bilgeAlarm::_lcd_line1;
     String bilgeAlarm::_lcd_line2;
 #endif
-#if TEST_VERSION
+#if DEMO_MODE
     bool bilgeAlarm::_ONBOARD_LED;
-    bool bilgeAlarm::_OTHER_LED;
     bool bilgeAlarm::_DEMO_MODE;
 #endif
 
@@ -265,6 +264,8 @@ uint32_t bilgeAlarm::m_pump2_debounce_time;
 uint32_t bilgeAlarm::m_relay_delay_time;
 uint32_t bilgeAlarm::m_relay_time;
 bool     bilgeAlarm::m_suppress_next_after;
+bool     bilgeAlarm::m_in_self_test;
+
 
 bilgeAlarmState_t bilgeAlarm::m_publish_state;
 
@@ -303,11 +304,9 @@ void bilgeAlarm::setup()
     digitalWrite(PIN_ALARM,0);
     digitalWrite(PIN_RELAY,0);
 
-#if TEST_VERSION
+#if DEMO_MODE
     pinMode(PIN_ONBOARD_LED,OUTPUT);
-    pinMode(PIN_OTHER_LED,OUTPUT);
     digitalWrite(PIN_ONBOARD_LED,0);
-    digitalWrite(PIN_OTHER_LED,0);
 #endif
 
     pinMode(PIN_PUMP1_ON, INPUT_PULLDOWN);
@@ -437,6 +436,18 @@ void bilgeAlarm::clearAlarmState(uint32_t alarm_state)
 // called from UI and myIOTValue.cpp invoke() via registered fxn
 
 
+void bilgeAlarm::selfTest()
+{
+    LOGU("selfTest()");
+    m_in_self_test = 1;
+    digitalWrite(PIN_RELAY,1);
+    alarmSelfTest();
+    digitalWrite(PIN_RELAY,0);
+    delay(1000);
+    m_in_self_test = 0;
+}
+
+
 void bilgeAlarm::suppressAlarm()
 {
     LOGU("suppressAlarm()");
@@ -504,17 +515,13 @@ void bilgeAlarm::clearError()
         LOGD("onLCDLine(%d,%s)",line,val);
     }
 #endif
-#if TEST_VERSION
+#if DEMO_MODE
     void bilgeAlarm::onLed(const myIOTValue *value, bool val)
     {
         String id = value->getId();
         if (id == ID_ONBOARD_LED)
         {
             digitalWrite(PIN_ONBOARD_LED,val);
-        }
-        else if (id == ID_OTHER_LED)
-        {
-            digitalWrite(PIN_OTHER_LED,val);
         }
     }
 #endif
@@ -610,7 +617,8 @@ void bilgeAlarm::stateTask(void *param)
     while (1)
     {
         vTaskDelay(bilge_alarm->_sense_millis / portTICK_PERIOD_MS);
-        bilge_alarm->stateMachine();
+        if (!m_in_self_test)
+            bilge_alarm->stateMachine();
     }
 }
 

@@ -123,7 +123,7 @@ const char *screens[] = {
 // things that show up in CONFIG_MODE
 
 static valueIdType config_mode_ids[] = {
-#if TEST_VERSION
+#if DEMO_MODE
     ID_DEMO_MODE,
 #endif
 
@@ -991,7 +991,7 @@ bool uiScreen::onButton(int button_num, int event_type)
                         break;
                     }
                     case SCREEN_SELFTEST:
-                        // bilgeAlarm::selfTest();
+                        bilgeAlarm::selfTest();
                         break;
                     case SCREEN_CLEAR_HISTORY:
                     case SCREEN_REBOOT :

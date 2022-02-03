@@ -8,4 +8,6 @@ extern void startAlarm();
 extern void initPixels();
 extern void setPixelBright(bool external,uint8_t val);
 extern void showIncSetupPixel();
+extern void alarmSelfTest();
+
     // called 3 times by myIOTDevice and once when alarmTask() is running()

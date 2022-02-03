@@ -151,6 +151,32 @@ void bilgeAlarm::showIncSetupProgress()
 // baAlarm
 //--------------------------
 
+void alarmSelfTest()
+{
+    pixels.clear();
+    pixels.show();
+    for (int i=0; i<NUM_PIXELS; i++)
+    {
+        for (int j=0; j<3; j++)
+        {
+            pixels.setPixelColor(i,
+                j==2 ? MY_LED_BLUE :
+                j==1 ? MY_LED_GREEN :
+                MY_LED_RED);
+            pixels.show();
+            delay(333);
+        }
+    }
+    for (int i=0; i<3; i++)
+    {
+        digitalWrite(PIN_ALARM,1);
+        delay(CHIRP_TIME);
+        digitalWrite(PIN_ALARM,0);
+        delay(333);
+    }
+    pixels.clear();
+    pixels.show();
+}
 
 
 static void alarmTask(void *param)
@@ -185,7 +211,7 @@ static void alarmTask(void *param)
         #define ALARM_REFRESH 50
         vTaskDelay(ALARM_REFRESH / portTICK_PERIOD_MS);
 
-        if (1)
+        if (!bilge_alarm->inSelfTest())
         {
             uint32_t now = millis();
             uint32_t state = bilgeAlarm::getState();
