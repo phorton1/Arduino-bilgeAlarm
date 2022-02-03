@@ -456,8 +456,8 @@ String baHistory::getHistoryHTML() const
         if (since < 5 * 365 * 24 * 60 * 60)
         {
             int days = since / (24 * 60 * 60);
-            int hours = (since % (24 * 60 * 60)) / (60 * 60);
-            int minutes = (since % (24 * 60 * 60 * 60)) / 60;
+            int hours = ((since % (24 * 60 * 60)) / (60 * 60)) % 24;
+            int minutes = ((since % (24 * 60 * 60 * 60)) / 60) % 60;
             int secs = since % 60;
             if (days)
             {
