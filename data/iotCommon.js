@@ -810,6 +810,11 @@ function onUploadClick(id)
     $('#' + id).click();
 }
 
+function onRefreshSDList()
+{
+    sendCommand("sdcard_list");
+}
+
 
 function onButton(evt)
 {

@@ -11,7 +11,7 @@
 // buttons 1 and 2 implement long press auto-increment
 
 
-#define DEBUG_BUTTONS  1
+#define DEBUG_BUTTONS  0
 
 #if DEBUG_BUTTONS
     #define DBG_BUTTON(...)     LOGD(__VA_ARGS__)

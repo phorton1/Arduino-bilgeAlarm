@@ -145,6 +145,7 @@ static enumValue pumpExtraType[] = {
     0};
 
 
+
 // value descriptors for bilgeAlaram
 
 const valDescriptor bilgeAlarm::m_bilge_values[] =
@@ -188,7 +189,7 @@ const valDescriptor bilgeAlarm::m_bilge_values[] =
 
     { ID_FORCE_RELAY,      VALUE_TYPE_BOOL,     VALUE_STORE_TOPIC,    VALUE_STYLE_NONE,       (void *) &_FORCE_RELAY,    (void *) onForceRelay },
 
-    { ID_POWER_12V,        VALUE_TYPE_FLOAT,    VALUE_STORE_PUB,      VALUE_STYLE_READONLY,   (void *) &_power_12v,       NULL,   { .float_range = { 0.00, -50.00, 50.00 }} },
+    { ID_POWER_12V,        VALUE_TYPE_FLOAT,    VALUE_STORE_PUB,      VALUE_STYLE_NO_LOG,     (void *) &_power_12v,       NULL,   { .float_range = { 0.00, -50.00, 50.00 }} },
     { ID_POWER_5V,         VALUE_TYPE_FLOAT,    VALUE_STORE_PUB,      VALUE_STYLE_READONLY,   (void *) &_power_5v,        NULL,   { .float_range = { 0.00, -300.00, 300.00 }} },
     { ID_CALIB_12V,        VALUE_TYPE_INT,      VALUE_STORE_PREF,     VALUE_STYLE_NONE,       (void *) &_calib_12v,       NULL,   { .int_range = { 1000,     500,  1500}} },
     { ID_CALIB_5V,         VALUE_TYPE_INT,      VALUE_STORE_PREF,     VALUE_STYLE_NONE,       (void *) &_calib_5v,        NULL,   { .int_range = { 1000,     500,  1500}} },
