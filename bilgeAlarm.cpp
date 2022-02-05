@@ -319,11 +319,9 @@ void bilgeAlarm::setup()
     // ui_screen =
     new uiScreen(button_pins);
 
-    showIncSetupPixel();    // 3
+    showIncSetupPixel();    // 1
 
     myIOTDevice::setup();
-
-
 
     setPixelBright(0,getInt(ID_LED_BRIGHT));
     setPixelBright(1,getInt(ID_EXT_LED_BRIGHT));
@@ -438,13 +436,16 @@ void bilgeAlarm::clearAlarmState(uint32_t alarm_state)
 
 
 void bilgeAlarm::selfTest()
+    // i don't like to run the pump during selfTest because because that
+    // interferes with statistical measurements of what's actually going
+    // on in the bilge.
 {
     LOGU("selfTest()");
     m_in_self_test = 1;
-    digitalWrite(PIN_RELAY,1);
+    // digitalWrite(PIN_RELAY,1);
     alarmSelfTest();
-    digitalWrite(PIN_RELAY,0);
-    delay(1000);
+    // digitalWrite(PIN_RELAY,0);
+    // delay(1000);
     m_in_self_test = 0;
 }
 

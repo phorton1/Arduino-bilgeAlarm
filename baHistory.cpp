@@ -56,15 +56,10 @@
 //
 //-------------------------------------------------------------------------
 //
-// Might be better to do away with the RTC memory stuff and just initialize
-// from the file if exists (and to write the time windows to files as they
-// are set too).   Change the order of #ifdefs so that #ifdef WITH_SD
-// drives which file system to use (and in general get rid of the WITH_SD
-// in myIOTSystem, making it either always on, or driven by a prefernce or
-// runtime init setting per-app).  Maybe do away with WITH_HIST_DATABASE.
-//
-// HOWEVER ... this is all good stuff, and right now it basically works, so
-// this is the implementation at the point of making the 1st circuit board(s).
+// Having done all that, it is simpler to do away with the RTC memory stuff and just
+// initialize from the file if exists.  This should set last_run and duration as well,
+// and it would be nice if it also could retrieve the "time windows" for error handling
+// to prevent re-alarm after reboot.
 
 #include "baHistory.h"
 #include "bilgeAlarm.h"

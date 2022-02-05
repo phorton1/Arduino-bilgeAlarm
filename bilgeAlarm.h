@@ -7,7 +7,7 @@
 #include <myIOTDevice.h>
 
 #define BILGE_ALARM             "bilgeAlarm"
-#define BILGE_ALARM_VERSION     "b0.05"
+#define BILGE_ALARM_VERSION     "b0.07"
 
 
 #define DEMO_MODE         1

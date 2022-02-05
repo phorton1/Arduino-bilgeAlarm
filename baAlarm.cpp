@@ -52,7 +52,6 @@
 #define MY_LED_WHITE    0xffffff
 
 Adafruit_NeoPixel pixels(NUM_PIXELS,PIN_LED_DATA);
-static int startup_pixel_num = 0;
 static int int_pixel_bright = DEFAULT_LED_BRIGHT;
 static int ext_pixel_bright = DEFAULT_EXT_LED_BRIGHT;
 
@@ -136,7 +135,13 @@ void setPixelBright(bool external, uint8_t val)
 void showIncSetupPixel()	// for startup sequence
 {
     static int pixel_num = 0;
-    setPixel(startup_pixel_num++,MY_LED_MAGENTA);
+    setPixel(PIXEL_EXTERN,
+        pixel_num==3 ? MY_LED_BLUE :
+        pixel_num==2 ? MY_LED_GREEN :
+        pixel_num==1 ? MY_LED_RED :
+        MY_LED_MAGENTA);
+    setPixel(pixel_num,MY_LED_MAGENTA);
+    if (pixel_num < NUM_PIXELS-1) pixel_num++;
     showPixels();
 }
 
@@ -155,8 +160,13 @@ void alarmSelfTest()
 {
     pixels.clear();
     pixels.show();
-    for (int i=0; i<NUM_PIXELS; i++)
+    for (int i=0; i<NUM_PIXELS-1; i++)  // external LED is handled separately
     {
+        pixels.setPixelColor(PIXEL_EXTERN,
+                i==3 ? MY_LED_BLUE :
+                i==2 ? MY_LED_GREEN :
+                i==1 ? MY_LED_RED :
+                MY_LED_MAGENTA);
         for (int j=0; j<3; j++)
         {
             pixels.setPixelColor(i,
@@ -185,8 +195,6 @@ static void alarmTask(void *param)
 {
     vTaskDelay(500 / portTICK_PERIOD_MS);
     DBG_ALARM("starting alarmTask loop on core(%d)",xPortGetCoreID());
-
-    showIncSetupPixel();        // 4
 
     vTaskDelay(500 / portTICK_PERIOD_MS);
     clearPixels();
