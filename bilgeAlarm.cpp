@@ -287,12 +287,12 @@ bilgeAlarm::bilgeAlarm()
     setTabLayouts(dash_items,config_items);
 }
 
-void bilgeAlarm::onInitRTCMemory()
-{
-    LOGI("bilgeAlarm::onInitRTCMemory()");
-    ba_history.initRTCMemory();
-    myIOTDevice::onInitRTCMemory();
-}
+// void bilgeAlarm::onInitRTCMemory()
+// {
+//     LOGI("bilgeAlarm::onInitRTCMemory()");
+//     ba_history.initRTCMemory();
+//     myIOTDevice::onInitRTCMemory();
+// }
 
 
 void bilgeAlarm::setup()
@@ -321,24 +321,43 @@ void bilgeAlarm::setup()
 
     showIncSetupPixel();    // 1
 
+    // init myIOTDevice
+
     myIOTDevice::setup();
 
-    setPixelBright(0,getInt(ID_LED_BRIGHT));
-    setPixelBright(1,getInt(ID_EXT_LED_BRIGHT));
+    // init hisotry
+    // if there was any history, setup the in-memory variables to be published
 
-    startAlarm();
+    ba_history.initHistory();
+
+    int iter = 0;
+    ba_history.initIterator(&iter);
+    const runHistory_t *hist = ba_history.getNext(&iter);
+    if (hist)
+    {
+        LOGD("initializing last_run to %s dur %d",timeToString(hist->tm).c_str(),hist->dur);
+        _time_last_run = hist->tm;
+        _since_last_run = (int32_t) hist->tm;
+        _dur_last_run = hist->dur;
+    }
 
     _history_link = "<a href='/custom/getHistory?uuid=";
     _history_link += getUUID();
     _history_link += "' target='_blank'>History</a>";
 
-    // See core notes in myIOTTypes.h
+    // finish bilgeAlarm setup
     //---------------------------------
+    // See core notes in myIOTTypes.h
     // Since I have removed all direct or indirect calls to setXXX()
     // from the stateTask() call chain, this task may now run on
     // ESP32_CORE_OTHER==0, separate from loop(), and the serial and
     // websocket task which must all run on ESP32_CORE_ARDUINO==1
     // for the LCD to work correctly.
+
+    setPixelBright(0,getInt(ID_LED_BRIGHT));
+    setPixelBright(1,getInt(ID_EXT_LED_BRIGHT));
+    startAlarm();
+
 
     LOGI("starting stateTask");
     xTaskCreatePinnedToCore(stateTask,
@@ -1049,14 +1068,17 @@ void bilgeAlarm::publishState()
     }
     if (m_publish_state.time_last_run != time_last_run)
     {
+        LOGD("bilgeAlarm publishing time_last_run %s",timeToString(time_last_run).c_str());
         setTime(ID_TIME_LAST_RUN,time_last_run);
     }
     if (m_publish_state.since_last_run != since_last_run)
     {
+        LOGD("bilgeAlarm publishing since_last_run %d",since_last_run);
         setInt(ID_SINCE_LAST_RUN,since_last_run);
     }
     if (m_publish_state.dur_last_run != dur_last_run)
     {
+        // LOGD("bilgeAlarm publishing dur_last_run %d",dur_last_run);
         setInt(ID_DUR_LAST_RUN,dur_last_run);
     }
     if (m_publish_state.num_last_hour != num_last_hour)

@@ -36,10 +36,10 @@ class baHistory
 {
     public:
 
+        void initHistory();
+            // initialize the history from the SD file if it exists
         void clearHistory();
             // clear the history
-        void initRTCMemory();
-            // update (or clear) the RTC in-memory database
 
         int countRuns(int count_how) const;
             // count of runs by COUNT constant
@@ -71,11 +71,11 @@ class baHistory
         void init();
 
         static time_t m_start_duration;
-        static RTC_NOINIT_ATTR int m_run_head;
-        static RTC_NOINIT_ATTR int m_prev_head;
-        static RTC_NOINIT_ATTR time_t m_clear_day_time;
-        static RTC_NOINIT_ATTR time_t m_clear_hour_time;
-        static RTC_NOINIT_ATTR runHistory_t m_run_history[MAX_RUN_HISTORY];
+        static int m_run_head;
+        static int m_prev_head;
+        static time_t m_clear_day_time;
+        static time_t m_clear_hour_time;
+        static runHistory_t m_run_history[MAX_RUN_HISTORY];
 
 };  // class baHistory
 

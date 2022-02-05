@@ -278,7 +278,7 @@ private:
     static void onLedBright(const myIOTValue *desc, bool val);
     virtual void onValueChanged(const myIOTValue *value, valueStore from=VALUE_STORE_PROG) override;
     virtual String onCustomLink(const String &path) override;
-    virtual void onInitRTCMemory() override;
+    // virtual void onInitRTCMemory() override;
 
     #if DEMO_MODE
         static void onLed(const myIOTValue *desc, bool val);

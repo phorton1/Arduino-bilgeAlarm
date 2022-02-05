@@ -502,6 +502,9 @@ void uiScreen::loop()
 
 void uiScreen::onValueChanged(const myIOTValue *value, valueStore from)
 {
+    if (!m_started)
+        return;
+
     const char *id = value->getId();
 
     // DBG_SCREEN("uiScreen onValueChanged(%s) from(%d) on core(%d)",id,from,xPortGetCoreID());
