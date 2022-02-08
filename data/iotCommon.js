@@ -927,7 +927,7 @@ function confirmDelete(fn)
 {
     if (window.confirm("Confirm deletion of \n" + fn))
     {
-        web_socket.send(JSON.stringify({cmd:"delete_file", filename:fn}));
+        sendCommand("delete_file",{filename:fn});
     }
 }
 
