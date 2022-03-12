@@ -159,7 +159,7 @@ void baHistory::updateStartDuration()
 }
 
 
-void baHistory::startRun()
+void baHistory::startRun(uint16_t flags /* =0 */)
 {
     time_t now = time(NULL);
     m_start_duration = now;
@@ -167,7 +167,7 @@ void baHistory::startRun()
     runHistory_t *ptr = &m_run_history[m_run_head];
     ptr->tm = now;
     ptr->dur = 0;
-    ptr->flags = 0;
+    ptr->flags = flags;
     m_prev_head = m_run_head;
     m_run_head++;
     if (m_run_head >= MAX_RUN_HISTORY)

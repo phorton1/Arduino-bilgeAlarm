@@ -47,7 +47,7 @@ class baHistory
             // sets the time window for COUNT_HOUR and COUNT_DAY
             // to the last num runs (used to clear count errors)
 
-        void startRun();
+        void startRun(uint16_t flags = 0);
             // start a run (a new history element)
         void setRunFlags(uint16_t flags);
             // update the flags (STATE_ types) for current/previous run
