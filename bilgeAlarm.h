@@ -162,6 +162,9 @@
 #define STATE_RELAY_EMERGENCY       0x0200      // the relay is on due to the ID_RUN_EMERGENCY value
 #define STATE_RELAY_EXTRA           0x0400      // the relay is on due to the ID_EXTRA_RUN_TIME value
 
+#define ALARM_ENABLED    0
+#define ALARM_SILENT     1
+#define ALARM_DISABLED   2
 
 
 typedef struct
@@ -192,6 +195,7 @@ public:
 
     static uint32_t getState()       { return m_publish_state.state; }
     static uint32_t getAlarmState()  { return m_publish_state.alarm_state; }
+    static uint32_t getDisabled()    { return _disabled; }
 
     static void clearError();
     static void suppressAlarm();
@@ -217,7 +221,7 @@ private:
 
     static String _history_link;
 
-    static bool _disabled;
+    static uint32_t  _disabled;
     static int  _backlight_secs;
     static int  _menu_secs;
     static int  _err_run_time;

@@ -10,6 +10,10 @@
 
 #define DEBUG_STATES  1
 
+#define DEBUG_SWITCHES 0
+    // set this to merely output the switch values once per second
+
+
 
 #define BUTTON_CHECK_TIME  30
 #define UI_UPDATE_TIME     30
@@ -118,6 +122,7 @@ static valueIdType config_items[] = {
 
 static enumValue disabledStates[] = {
     "enabled",
+    "silent",
     "disabled",
     0};
 static enumValue alarmStates[] = {
@@ -226,7 +231,7 @@ String   bilgeAlarm::_history_link;
 
 // values (public)
 
-bool bilgeAlarm::_disabled;
+uint32_t  bilgeAlarm::_disabled;
 int  bilgeAlarm::_backlight_secs;
 int  bilgeAlarm::_menu_secs;
 int  bilgeAlarm::_err_run_time;
@@ -637,7 +642,11 @@ void bilgeAlarm::stateTask(void *param)
     delay(1200);
     while (1)
     {
-        vTaskDelay(bilge_alarm->_sense_millis / portTICK_PERIOD_MS);
+        #if DEBUG_SWITCHES
+            vTaskDelay(1000 / portTICK_PERIOD_MS);
+        #else
+            vTaskDelay(bilge_alarm->_sense_millis / portTICK_PERIOD_MS);
+        #endif
         if (!m_in_self_test)
             bilge_alarm->stateMachine();
     }
@@ -669,6 +678,12 @@ void bilgeAlarm::stateMachine()
         bool pump2_on = raw2 > _sw_threshold ? 1 : 0;
     #endif
 
+    #if DEBUG_SWITCHES
+        LOGD("DEBUG_SWITCHES   pump1=%-6d  pump2=%-6d",raw1,raw2);
+        return;
+    #endif
+
+
     bool was_on1 = _state & STATE_PUMP1_ON;
     bool was_on2 = _state & STATE_PUMP2_ON;
     bool pump1_valid = now > m_pump1_debounce_time;
@@ -684,7 +699,7 @@ void bilgeAlarm::stateMachine()
     if (!count_this_run)
     {
         if ((pump2_on && pump2_valid) ||
-            (pump1_on && pump1_valid && !forced_on && !after_extra))
+            (pump1_on && pump1_valid && !emergency_relay_on && !forced_on && !after_extra))
         {
             subtract_relay = 0;
             ba_history.startRun();
@@ -711,7 +726,7 @@ void bilgeAlarm::stateMachine()
             uint32_t new_state = _state | STATE_PUMP2_ON;
             bool was_emergency = _state & STATE_EMERGENCY;
 
-            if (!_disabled)
+            if (_disabled != ALARM_DISABLED)
             {
                 new_state |= STATE_EMERGENCY;
                 setAlarmState(ALARM_STATE_EMERGENCY | ALARM_STATE_CRITICAL);
@@ -725,7 +740,7 @@ void bilgeAlarm::stateMachine()
             setState(new_state);
             ba_history.setRunFlags(STATE_EMERGENCY);
 
-            if (!_disabled)
+            if (_disabled != ALARM_DISABLED)
             {
                 if (!was_emergency)
                 {
@@ -776,7 +791,7 @@ void bilgeAlarm::stateMachine()
             clearState(STATE_PUMP1_ON);
         }
 
-        if (!_disabled && !forced_on && !emergency_relay_on && _extra_run_time)
+        if (_disabled != ALARM_DISABLED && !forced_on && !emergency_relay_on && _extra_run_time)
         {
             if (pump1_on && !_extra_run_mode)
             {
@@ -816,7 +831,7 @@ void bilgeAlarm::stateMachine()
         if (_err_run_time && duration > _err_run_time)
         {
             ba_history.setRunFlags(STATE_TOO_LONG);
-            if (!_disabled && !(_state & STATE_TOO_LONG))
+            if (_disabled != ALARM_DISABLED && !(_state & STATE_TOO_LONG))
             {
                 LOGU("ALARM - PUMP TOO LONG");
                 addState(STATE_TOO_LONG);
@@ -828,7 +843,7 @@ void bilgeAlarm::stateMachine()
         if (_crit_run_time && duration > _crit_run_time)
         {
             ba_history.setRunFlags(STATE_CRITICAL_TOO_LONG);
-            if (!_disabled && !(_state & STATE_CRITICAL_TOO_LONG))
+            if (_disabled != ALARM_DISABLED && !(_state & STATE_CRITICAL_TOO_LONG))
             {
                 LOGU("ALARM - PUMP CRITICAL TOO LONG");
                 addState(STATE_CRITICAL_TOO_LONG);
@@ -841,7 +856,7 @@ void bilgeAlarm::stateMachine()
     // THE RELAY
     //------------------------------------
 
-    if (!_disabled && !forced_on)
+    if (_disabled != ALARM_DISABLED && !forced_on)
     {
         static uint32_t last_relay_state = 0;
         uint32_t relay_state = _state & (
@@ -970,7 +985,7 @@ void bilgeAlarm::stateMachine()
             {
                 ba_history.setRunFlags(STATE_TOO_OFTEN_HOUR);
 
-                if (!_disabled)
+                if (_disabled != ALARM_DISABLED)
                 {
                     LOGU("ALARM - TOO MANY PER HOUR");
                     addState(STATE_TOO_OFTEN_HOUR);
@@ -995,7 +1010,7 @@ void bilgeAlarm::stateMachine()
             {
                 ba_history.setRunFlags(STATE_TOO_OFTEN_DAY);
 
-                if (!_disabled)
+                if (_disabled != ALARM_DISABLED)
                 {
                     LOGU("ALARM - TOO MANY PER DAY");
                     addState(STATE_TOO_OFTEN_DAY);

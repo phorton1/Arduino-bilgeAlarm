@@ -224,6 +224,7 @@ static void alarmTask(void *param)
             uint32_t now = millis();
             uint32_t state = bilgeAlarm::getState();
             uint32_t alarm_state = bilgeAlarm::getAlarmState();
+            uint32_t disabled = bilgeAlarm::getDisabled();
 
             bool show_pixels = false;
 
@@ -268,7 +269,7 @@ static void alarmTask(void *param)
                     alarm_state & ALARM_STATE_CRITICAL ? NUM_CRITICAL : 1;
                 cycle_num = 0;
 
-                digitalWrite(PIN_ALARM,alarm_on);
+                digitalWrite(PIN_ALARM,!disabled && alarm_on);
                 setPixel(PIXEL_ALARM,alarm_state?MY_LED_MAGENTA:MY_LED_BLACK);
                 setPixel(PIXEL_EXTERN,alarm_on?MY_LED_MAGENTA:external_color);
 
@@ -315,7 +316,7 @@ static void alarmTask(void *param)
                 }
                 else
                 {
-                    digitalWrite(PIN_ALARM,1);
+                    digitalWrite(PIN_ALARM,!disabled);
                     setPixel(PIXEL_EXTERN,MY_LED_MAGENTA);
                     cycle_time = now + TIME_BETWEEN_CYCLES;
                     chirp_off_time = now + CHIRP_TIME;
@@ -326,7 +327,7 @@ static void alarmTask(void *param)
             }
             if (alarm_time && now > alarm_time)
             {
-                digitalWrite(PIN_ALARM,1);
+                digitalWrite(PIN_ALARM,!disabled);
                 setPixel(PIXEL_EXTERN,MY_LED_MAGENTA);
                 alarm_time = now + TIME_BETWEEN_ALARMS;
                 cycle_num = 0;
