@@ -632,7 +632,9 @@ function addInput(item)
             max: is_bool ? 1 : item.max
         })
     if (item.type == VALUE_TYPE_FLOAT)
-        input.attr({step : "0.001" });
+        input.attr({
+            step : "0.001",
+            'data-decimals' : 3 });
     return input;
 }
 
