@@ -6,8 +6,8 @@
 #include "baAlarm.h"      // for showIncSetupPixel()
 #include <myIOTLog.h>
 
-#ifdef WITH_SD
-    #define INIT_SD_EARLY
+#if WITH_SD
+    #define INIT_SD_EARLY 1
 #endif
 
 
@@ -30,8 +30,8 @@ void setup()
     // due to it's wonky SPI behavior, and so that
     // logfile can begin immediately.
 
-    #ifdef WITH_SD
-    #ifdef INIT_SD_EARLY
+    #if WITH_SD
+    #if INIT_SD_EARLY
         bool sd_ok = bilgeAlarm::initSDCard();
     #endif
     #endif
@@ -42,8 +42,8 @@ void setup()
 
     showIncSetupPixel();    // 0
 
-    #ifdef WITH_SD
-    #ifdef INIT_SD_EARLY
+    #if WITH_SD
+    #if INIT_SD_EARLY
         LOGD("sd_ok=%d",sd_ok);
     #endif
     #endif

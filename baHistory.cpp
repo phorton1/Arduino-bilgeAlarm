@@ -48,7 +48,7 @@ void baHistory::clearHistory()
     LOGI("baHistory::clearHistory()");
     proc_entry();
 
-    #ifdef WITH_SD
+    #if WITH_SD
         if (!bilgeAlarm::hasSD())
         {
             LOGE("NO SD CARD in baHistory::clearHistory(DATABASE_ON_SD)");
@@ -80,7 +80,7 @@ void baHistory::initHistory()
 
     init();
 
-    #ifdef WITH_SD
+    #if WITH_SD
         if (!bilgeAlarm::hasSD())
         {
             LOGE("NO SD CARD in baHistory::initRTCMemory(DATABASE_ON_SD)");
@@ -184,7 +184,7 @@ uint32_t baHistory::endRun()
     ptr->dur = duration;
     m_start_duration = 0;
 
-    #ifdef WITH_SD
+    #if WITH_SD
         if (!bilgeAlarm::hasSD())
         {
             LOGE("NO SD CARD in baHistory::endRun(DATABASE_ON_SD)");
