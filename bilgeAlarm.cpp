@@ -80,10 +80,6 @@ static valueIdType dash_items[] = {
     ID_LCD_LINE2,
 #endif
     ID_FORCE_RELAY,
-#if DEMO_MODE
-    ID_ONBOARD_LED,
-    ID_DEMO_MODE,
-#endif
     ID_REBOOT,
     0
 };
@@ -91,9 +87,6 @@ static valueIdType dash_items[] = {
 // what shows up on the "device" UI tab
 
 static valueIdType config_items[] = {
-#if DEMO_MODE
-    ID_DEMO_MODE,
-#endif
     ID_SELFTEST,
     ID_DISABLED,
     ID_ERR_RUN_TIME,
@@ -203,10 +196,6 @@ const valDescriptor bilgeAlarm::m_bilge_values[] =
     { ID_LCD_LINE1,        VALUE_TYPE_STRING,   VALUE_STORE_TOPIC,    VALUE_STYLE_LONG,       (void *) &_lcd_line1,      (void *) onLcdLine },
     { ID_LCD_LINE2,        VALUE_TYPE_STRING,   VALUE_STORE_TOPIC,    VALUE_STYLE_LONG,       (void *) &_lcd_line2,      (void *) onLcdLine },
 #endif
-#if DEMO_MODE
-    { ID_ONBOARD_LED,      VALUE_TYPE_BOOL,     VALUE_STORE_TOPIC,    VALUE_STYLE_NONE,       (void *) &_ONBOARD_LED,    (void *) onLed, },
-    { ID_DEMO_MODE,        VALUE_TYPE_BOOL,     VALUE_STORE_PREF,     VALUE_STYLE_NONE,       (void *) &_DEMO_MODE,      },
-#endif
 
     // following places a custom link on the dashboard page
 
@@ -258,10 +247,7 @@ bool bilgeAlarm::_FORCE_RELAY;
     String bilgeAlarm::_lcd_line1;
     String bilgeAlarm::_lcd_line2;
 #endif
-#if DEMO_MODE
-    bool bilgeAlarm::_ONBOARD_LED;
-    bool bilgeAlarm::_DEMO_MODE;
-#endif
+
 
 // working vars
 
@@ -309,11 +295,6 @@ void bilgeAlarm::setup()
     pinMode(PIN_RELAY,OUTPUT);
     digitalWrite(PIN_ALARM,0);
     digitalWrite(PIN_RELAY,0);
-
-#if DEMO_MODE
-    pinMode(PIN_ONBOARD_LED,OUTPUT);
-    digitalWrite(PIN_ONBOARD_LED,0);
-#endif
 
     pinMode(PIN_PUMP1_ON, INPUT_PULLDOWN);
     pinMode(PIN_PUMP2_ON, INPUT_PULLDOWN);
@@ -541,16 +522,7 @@ void bilgeAlarm::clearError()
         LOGD("onLCDLine(%d,%s)",line,val);
     }
 #endif
-#if DEMO_MODE
-    void bilgeAlarm::onLed(const myIOTValue *value, bool val)
-    {
-        String id = value->getId();
-        if (id == ID_ONBOARD_LED)
-        {
-            digitalWrite(PIN_ONBOARD_LED,val);
-        }
-    }
-#endif
+
 
 
 void bilgeAlarm::onLedBright(const myIOTValue *desc, bool val)

@@ -10,11 +10,10 @@
 #define BILGE_ALARM_VERSION     "b0.07"
 
 
-#define DEMO_MODE         1
-    // includes LEDs, DEMO_MODE
-#define HAS_LCD_LINE_VALUES  0
-
 #define BILGE_POWER          1
+    // standard feature - show the 12V and 5V power supplies
+#define HAS_LCD_LINE_VALUES  0
+    // experimental feature - use VALUES for the two lines of LCD text
 
 
 #define DEFAULT_LED_BRIGHT        10
@@ -123,10 +122,6 @@
 #if HAS_LCD_LINE_VALUES
     #define ID_LCD_LINE1        "LCD_LINE1"
     #define ID_LCD_LINE2        "LCD_LINE2"
-#endif
-#if DEMO_MODE
-    #define ID_ONBOARD_LED      "ONBOARD_LED"
-    #define ID_DEMO_MODE        "DEMO_MODE"
 #endif
 
 
@@ -248,10 +243,6 @@ private:
         static String _lcd_line1;
         static String _lcd_line2;
     #endif
-    #if DEMO_MODE
-        static bool _ONBOARD_LED;
-        static bool _DEMO_MODE;
-    #endif
 
     // working vars
 
@@ -284,9 +275,6 @@ private:
     virtual String onCustomLink(const String &path) override;
     // virtual void onInitRTCMemory() override;
 
-    #if DEMO_MODE
-        static void onLed(const myIOTValue *desc, bool val);
-    #endif
     #if HAS_LCD_LINE_VALUES
         static void onLcdLine(const myIOTValue *desc, const char *val);
     #endif

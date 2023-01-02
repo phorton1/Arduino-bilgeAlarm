@@ -65,18 +65,4 @@ void setup()
 void loop()
 {
     bilge_alarm->loop();
-
-    #if DEMO_MODE
-        if (bilge_alarm->getBool(ID_DEMO_MODE))
-        {
-            uint32_t now = millis();
-            static uint32_t toggle_led = 0;
-            if (now > toggle_led + 2000)
-            {
-                toggle_led = now;
-                bool led_state = bilge_alarm->getBool(ID_ONBOARD_LED);
-                bilge_alarm->setBool(ID_ONBOARD_LED,!led_state);
-            }
-        }
-    #endif
 }

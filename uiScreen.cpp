@@ -123,9 +123,6 @@ const char *screens[] = {
 // things that show up in CONFIG_MODE
 
 static valueIdType config_mode_ids[] = {
-#if DEMO_MODE
-    ID_DEMO_MODE,
-#endif
 
     ID_DISABLED,
     ID_ERR_RUN_TIME,
