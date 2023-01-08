@@ -75,14 +75,14 @@
 #define SCREEN_PRESS_TO_CLEAR   2
 #define SCREEN_ALARM_CLEARED    3
 
-#define SCREEN_MAIN             4
-#define SCREEN_WIFI             5
-#define SCREEN_POWER            6
-#define SCREEN_RELAY            7
-#define SCREEN_SELFTEST         8
-#define SCREEN_CLEAR_HISTORY    9
-#define SCREEN_REBOOT           10
-#define SCREEN_FACTORY_RESET    11
+#define SCREEN_MAIN             4       // readonly - the HOUR, DAY, WEEK, TIMER window
+#define SCREEN_WIFI             5       // readonly - shows the IP address and Wifi Info
+#define SCREEN_POWER            6       // readonly - shows the power to the device
+#define SCREEN_RELAY            7       // command - turn the relay on and off
+#define SCREEN_SELFTEST         8       // command - run through the LEDs and chirp
+#define SCREEN_CLEAR_HISTORY    9       // command - clear the history with confirm
+#define SCREEN_REBOOT           10      // command - reboot the device with confirm
+#define SCREEN_FACTORY_RESET    11      // command - factory reset with confirm
 #define LAST_MAIN_SCREEN        11
 
 #define SCREEN_CONFIRM          12
@@ -134,13 +134,10 @@ static valueIdType config_mode_ids[] = {
     ID_EXTRA_RUN_MODE,
     ID_EXTRA_RUN_DELAY,
 
-    ID_BACKLIGHT_SECS,      // from bilgeAlarm
-    ID_MENU_SECS,           // from bilgeAlarm
+    ID_BACKLIGHT_SECS,
+    ID_MENU_SECS,
     ID_LED_BRIGHT,
     ID_EXT_LED_BRIGHT,
-
-    ID_DEBUG_LEVEL,
-    ID_LOG_LEVEL,
 
     ID_DEVICE_NAME,         // strings are forced to read-only
     ID_DEVICE_TYPE,
