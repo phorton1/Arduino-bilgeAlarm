@@ -13,25 +13,33 @@
 // Errors take over the whole button scheme
 //     - any button to suppress alarm
 //     - any button to clear alarm
-// Otherwise, if MENU_TIME is set, and no buttons are pressed
+//
+// If the screen is off, any button turns the screen on
+//     and is eaten.
+//
+// if MENU_TIME is set, and no buttons are pressed
 //     after MENU_TIME seconds the system returns to the
 //     MAIN_MODE and MAIN_SCREEN.
 //
 // A long click of the LEFT button while not on the MAIN_SCREEN
 //     returns to the MAIN_SCREEN (and MAIN_MODE)
 // A long click of the LEFT button in MAIN_MODE goes to CONFIG_MODE
-// A long click of the MIDDLE button in MAIN_MODE goes to DEVICE_MODE
+// A long click of the MIDDLE button in MAIN_MODE goes to HISTORY_MODE
 //
-// A click of the MIDDLE button from the MAIN_SCREEN goes to HISTORY mode
-//     In history mode the MIDDLE button (continues to) increments screens
-//     wheaas the RIGHT button decrements screens (both with wrapping)
-//     and the LEFT button returns to MAIN mode
-// Otherwise in MAIN, CONFIG, and DEVICE modes (generally)
-//     a click of LEFT button cycles through screen within the mode
-//     The RIGHT button is used to perform commands
-//     The MIDDLE and RIGHT buttons are decrement and increment for values
-// In commands that require a confirm,
-//     the RIGHT button is CONFIRM, and the MIDDLE button is CANCEL
+// A short click of the LEFT button cycles forwards through the screens in the mode (with wrapping)
+// A short click of the RIGHT button confirms, executes commands, or increments values (if there is a value),
+//   and also goes to the next history screen if in HISTORY_MODE
+// A short click of the MIDDLE button cancels confirms, or decrements values (if it therte is a value)
+//   and also goes to the previous history screen if in HISTORY_MODE
+//
+// A long click of the RIGHT button EXECUTES OR CONFIRMS COMMANDS, auto-increments
+//     values if there is one, or auto-increments the history screen.
+// A long click of the MIDDLE button does nothing on commands, but CANCELS COMMANDS,
+//     auto decremens values if there is one, or auto-decrements the history screen.
+//
+// IMPLEMENTATION NOTE: modes are set by changing screens.  A call to setScreen() will
+//     change the mode.
+
 
 
 #include "uiScreen.h"
@@ -945,6 +953,29 @@ bool uiScreen::onButton(int button_num, int event_type)
 
     m_activity_time = millis();
 
+    //-------------------------------------------
+    // Confirm Screen
+    //-------------------------------------------
+
+    if (m_screen_num == SCREEN_CONFIRM)
+    {
+        if (button_num == 2)
+        {
+            if (m_prev_screen == SCREEN_CLEAR_HISTORY)
+                bilgeAlarm::clearHistory();
+            else if (m_prev_screen == SCREEN_REBOOT)
+                bilgeAlarm::reboot();
+            else if (m_prev_screen == SCREEN_FACTORY_RESET)
+                bilgeAlarm::factoryReset();
+            setScreen(SCREEN_MAIN);
+        }
+        else
+            setScreen(m_prev_screen);
+        return true;
+    }
+
+
+
     //---------------------------
     // MAIN_MODE
     //---------------------------
@@ -967,50 +998,40 @@ bool uiScreen::onButton(int button_num, int event_type)
                 return true;
             }
         }
-        else
+        else if (button_num == 1)
         {
-            if (button_num == 1)
+            if (event_type == BUTTON_TYPE_LONG_CLICK)
             {
-                if (event_type == BUTTON_TYPE_CLICK)
-                {
-                    if (m_screen_num == SCREEN_CONFIRM)
-                        setScreen(m_prev_screen);
-                    else
-                        setScreen(SCREEN_HISTORY_BASE);
-                    return true;
-                }
-            }
-            else if (button_num == 2)
-            {
-                switch (m_screen_num)
-                {
-                    case SCREEN_RELAY:
-                    {
-                        bool relay_on = state & STATE_RELAY_FORCED;
-                        bilge_alarm->setBool(ID_FORCE_RELAY,!relay_on);
-                        setScreen(m_screen_num);
-                        break;
-                    }
-                    case SCREEN_SELFTEST:
-                        bilgeAlarm::selfTest();
-                        break;
-                    case SCREEN_CLEAR_HISTORY:
-                    case SCREEN_REBOOT :
-                    case SCREEN_FACTORY_RESET:
-                        setScreen(SCREEN_CONFIRM);
-                        break;
-                    case SCREEN_CONFIRM:
-                        if (m_prev_screen == SCREEN_CLEAR_HISTORY)
-                             bilgeAlarm::clearHistory();
-                        else if (m_prev_screen == SCREEN_REBOOT)
-                            bilgeAlarm::reboot();
-                        else if (m_prev_screen == SCREEN_FACTORY_RESET)
-                            bilgeAlarm::factoryReset();
-                        setScreen(SCREEN_MAIN);
-                        break;
-                }
+                setScreen(SCREEN_HISTORY_BASE);
                 return true;
             }
+            // a middle short click in MAIN_MODE does nothing
+            return true;
+        }
+
+        // long OR short presses have same semantic on button2 in main mode
+
+        else if (button_num == 2)
+        {
+            switch (m_screen_num)
+            {
+                case SCREEN_RELAY:
+                {
+                    bool relay_on = state & STATE_RELAY_FORCED;
+                    bilge_alarm->setBool(ID_FORCE_RELAY,!relay_on);
+                    setScreen(m_screen_num);
+                    break;
+                }
+                case SCREEN_SELFTEST:
+                    bilgeAlarm::selfTest();
+                    break;
+                case SCREEN_CLEAR_HISTORY:
+                case SCREEN_REBOOT :
+                case SCREEN_FACTORY_RESET:
+                    setScreen(SCREEN_CONFIRM);
+                    break;
+            }
+            return true;
         }
     }
 
@@ -1020,7 +1041,7 @@ bool uiScreen::onButton(int button_num, int event_type)
 
     else if (m_menu_mode == MENU_MODE_HISTORY)
     {
-        if (button_num == 0 )
+        if (button_num == 0 && event_type == BUTTON_TYPE_LONG_CLICK)
         {
             setScreen(SCREEN_MAIN);
         }
@@ -1037,7 +1058,7 @@ bool uiScreen::onButton(int button_num, int event_type)
                 setScreen(SCREEN_HISTORY_BASE);
             }
         }
-        else if (button_num == 2)
+        else if (button_num == 0 || button_num == 2)
         {
             if (m_screen_num == SCREEN_HISTORY_BASE)
             {
@@ -1082,12 +1103,6 @@ bool uiScreen::onButton(int button_num, int event_type)
 
     else // if (m_menu_mode == MENU_MODE_CONFIG)
     {
-        if (m_screen_num == SCREEN_CONFIG_BASE &&
-            event_type == BUTTON_TYPE_LONG_CLICK)
-        {
-            setScreen(SCREEN_MAIN);
-            return true;
-        }
         if (button_num == 0)
         {
             if (event_type == BUTTON_TYPE_LONG_CLICK)
