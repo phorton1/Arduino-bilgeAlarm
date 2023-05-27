@@ -32,7 +32,13 @@ void setup()
 
     #if WITH_SD
     #if INIT_SD_EARLY
-        bool sd_ok = bilgeAlarm::initSDCard();
+        bool sd_ok = 0;
+        int init_count = 0;
+        while (!sd_ok && init_count++ < 10)
+        {
+            sd_ok = bilgeAlarm::initSDCard();
+            delay(400);
+        }
     #endif
     #endif
 
@@ -44,7 +50,8 @@ void setup()
 
     #if WITH_SD
     #if INIT_SD_EARLY
-        LOGD("sd_ok=%d",sd_ok);
+        LOGU("sd_ok=%d init_count=%d",sd_ok,init_count);
+        delay(200);
     #endif
     #endif
 

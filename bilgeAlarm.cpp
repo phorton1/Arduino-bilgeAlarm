@@ -267,6 +267,18 @@ bilgeAlarm *bilge_alarm = NULL;
 static bool count_this_run = 0;
 
 
+#if WITH_AUTO_REBOOT
+    // virtual
+    bool bilgeAlarm::okToAutoReboot() // override;
+        // it is only ok to auto reboot if nothing
+        // is going on, and hasn't for at least 5 mintues
+    {
+        return !_state &&
+               !_alarm_state &&
+               time(NULL) - _time_last_run > 300;
+    }
+#endif
+
 //--------------------------------
 // implementation
 //--------------------------------

@@ -275,6 +275,10 @@ private:
     virtual String onCustomLink(const String &path) override;
     // virtual void onInitRTCMemory() override;
 
+    #if WITH_AUTO_REBOOT
+        virtual bool okToAutoReboot() override;
+    #endif
+
     #if HAS_LCD_LINE_VALUES
         static void onLcdLine(const myIOTValue *desc, const char *val);
     #endif
