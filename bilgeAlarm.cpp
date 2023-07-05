@@ -150,16 +150,16 @@ const valDescriptor bilgeAlarm::m_bilge_values[] =
 {
     { ID_DEVICE_NAME,      VALUE_TYPE_STRING,   VALUE_STORE_PREF,     VALUE_STYLE_REQUIRED,   NULL,                     NULL,   BILGE_ALARM },        // override base class element
 
-    { ID_SELFTEST,         VALUE_TYPE_COMMAND,  VALUE_STORE_MQTT_SUB, VALUE_STYLE_NONE,       NULL,                     (void *) selfTest },
-    { ID_SUPPRESS,         VALUE_TYPE_COMMAND,  VALUE_STORE_MQTT_SUB, VALUE_STYLE_NONE,       NULL,                     (void *) suppressAlarm },
-    { ID_CLEAR_ERROR,      VALUE_TYPE_COMMAND,  VALUE_STORE_MQTT_SUB, VALUE_STYLE_NONE,       NULL,                     (void *) clearError },
-    { ID_CLEAR_HISTORY,    VALUE_TYPE_COMMAND,  VALUE_STORE_MQTT_SUB, VALUE_STYLE_VERIFY,     NULL,                     (void *) clearHistory },
+    { ID_SELFTEST,         VALUE_TYPE_COMMAND,  VALUE_STORE_SUB,      VALUE_STYLE_NONE,       NULL,                     (void *) selfTest },
+    { ID_SUPPRESS,         VALUE_TYPE_COMMAND,  VALUE_STORE_SUB,      VALUE_STYLE_NONE,       NULL,                     (void *) suppressAlarm },
+    { ID_CLEAR_ERROR,      VALUE_TYPE_COMMAND,  VALUE_STORE_SUB,      VALUE_STYLE_NONE,       NULL,                     (void *) clearError },
+    { ID_CLEAR_HISTORY,    VALUE_TYPE_COMMAND,  VALUE_STORE_SUB,      VALUE_STYLE_VERIFY,     NULL,                     (void *) clearHistory },
 
     { ID_STATE,            VALUE_TYPE_BENUM,    VALUE_STORE_PUB,      VALUE_STYLE_READONLY,   (void *) &m_publish_state.state,         NULL,   { .enum_range = { 0, systemStates }} },
     { ID_ALARM_STATE,      VALUE_TYPE_BENUM,    VALUE_STORE_TOPIC,    VALUE_STYLE_LONG,       (void *) &m_publish_state.alarm_state,   NULL,   { .enum_range = { 0, alarmStates }} },
     { ID_STATE,            VALUE_TYPE_BENUM,    VALUE_STORE_PUB,      VALUE_STYLE_READONLY,   (void *) &m_publish_state.state,         NULL,   { .enum_range = { 0, systemStates }} },
     { ID_TIME_LAST_RUN,    VALUE_TYPE_TIME,     VALUE_STORE_PUB,      VALUE_STYLE_READONLY,   (void *) &m_publish_state.time_last_run, },
-    { ID_SINCE_LAST_RUN,   VALUE_TYPE_INT,      VALUE_STORE_PUB,      VALUE_STYLE_HIST_TIME,  (void *) &m_publish_state.since_last_run,NULL,   { .int_range = { 0, -DEVICE_MAX_INT-1, DEVICE_MAX_INT}}  },
+    { ID_SINCE_LAST_RUN,   VALUE_TYPE_INT,      VALUE_STORE_PUB,      VALUE_STYLE_HIST_TIME,  (void *) &m_publish_state.since_last_run,NULL,   { .int_range = { 0, DEVICE_MIN_INT, DEVICE_MAX_INT}}  },
     { ID_DUR_LAST_RUN,     VALUE_TYPE_INT,      VALUE_STORE_PUB,      VALUE_STYLE_READONLY,   (void *) &m_publish_state.dur_last_run,  NULL,   { .int_range = { 0, 0, DEVICE_MAX_INT}}  },
     { ID_NUM_LAST_HOUR,    VALUE_TYPE_INT,      VALUE_STORE_PUB,      VALUE_STYLE_READONLY,   (void *) &m_publish_state.num_last_hour, NULL,   { .int_range = { 0, 0, DEVICE_MAX_INT}}  },
     { ID_NUM_LAST_DAY,     VALUE_TYPE_INT,      VALUE_STORE_PUB,      VALUE_STYLE_READONLY,   (void *) &m_publish_state.num_last_day,  NULL,   { .int_range = { 0, 0, DEVICE_MAX_INT}}  },
