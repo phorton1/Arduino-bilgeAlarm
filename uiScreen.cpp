@@ -55,7 +55,7 @@
 
 
 #if DEBUG_SCREEN
-    #define DBG_SCREEN(...)     LOGD(__VA_ARGS__)
+    #define DBG_SCREEN(...)     LOGV(__VA_ARGS__)
 #else
     #define DBG_SCREEN(...)
 #endif
