@@ -180,8 +180,8 @@ const valDescriptor bilgeAlarm::m_bilge_values[] =
     { ID_SW_THRESHOLD,     VALUE_TYPE_INT,      VALUE_STORE_PREF,     VALUE_STYLE_NONE,       (void *) &_sw_threshold,   NULL,  { .int_range = { DEFAULT_SW_THRESHOLD,      5,  4095}} },
 
 
-    { ID_BACKLIGHT_SECS,   VALUE_TYPE_INT,      VALUE_STORE_PREF,     VALUE_STYLE_OFF_ZERO,   (void *) &_backlight_secs, NULL,  { .int_range = { DEFAULT_BACKLIGHT_SECS,    MIN_BACKLIGHT_SECS, 3600}}  },
-    { ID_MENU_SECS,        VALUE_TYPE_INT,      VALUE_STORE_PREF,     VALUE_STYLE_OFF_ZERO,   (void *) &_menu_secs,      NULL,  { .int_range = { DEFAULT_MENU_SECS,         MIN_MENU_SECS,      3600}}  },
+    { ID_BACKLIGHT_SECS,   VALUE_TYPE_INT,      VALUE_STORE_PREF,     VALUE_STYLE_NONE,       (void *) &_backlight_secs, NULL,  { .int_range = { DEFAULT_BACKLIGHT_SECS,    MIN_BACKLIGHT_SECS, 3600}}  },
+    { ID_MENU_SECS,        VALUE_TYPE_INT,      VALUE_STORE_PREF,     VALUE_STYLE_NONE,       (void *) &_menu_secs,      NULL,  { .int_range = { DEFAULT_MENU_SECS,         MIN_MENU_SECS,      3600}}  },
     { ID_LED_BRIGHT,       VALUE_TYPE_INT,      VALUE_STORE_PREF,     VALUE_STYLE_OFF_ZERO,   NULL,                      (void *) onLedBright, { .int_range = { DEFAULT_LED_BRIGHT, 0, 255}}  },
     { ID_EXT_LED_BRIGHT,   VALUE_TYPE_INT,      VALUE_STORE_PREF,     VALUE_STYLE_OFF_ZERO,   NULL,                      (void *) onLedBright, { .int_range = { DEFAULT_LED_BRIGHT, 0, 255}}  },
 
