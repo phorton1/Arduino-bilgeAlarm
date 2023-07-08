@@ -25,6 +25,7 @@ void setup()
 
     bilgeAlarm::setDeviceType(BILGE_ALARM);
     bilgeAlarm::setDeviceVersion(BILGE_ALARM_VERSION);
+    bilgeAlarm::setDeviceUrl(BILGE_ALARM_URL);
 
     // init the SD Card early in derived device
     // due to it's wonky SPI behavior, and so that

@@ -8,6 +8,7 @@
 
 #define BILGE_ALARM             "bilgeAlarm"
 #define BILGE_ALARM_VERSION     "b0.07"
+#define BILGE_ALARM_URL			"https://github.com/phorton1/Arduino-bilgeAlarm"
 
 
 #define BILGE_POWER          1
