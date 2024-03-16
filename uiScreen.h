@@ -43,7 +43,7 @@ class uiScreen
 
         int m_hist_num;
         int m_hist_iter;
-        const runHistory_t *m_hist_ptr;
+        const historyItem_t *m_hist_ptr;
 
         // following inited on BASE_SCREEN
 

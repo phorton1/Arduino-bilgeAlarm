@@ -59,6 +59,8 @@
 #define ID_TIME_LAST_RUN    "TIME_LAST_RUN"
 #define ID_DUR_LAST_RUN     "DUR_LAST_RUN"
 #define ID_SINCE_LAST_RUN   "SINCE_LAST_RUN"
+#define ID_HOUR_CUTOFF      "HOUR_CUTOFF"
+#define ID_DAY_CUTOFF       "DAY_CUTOFF"
 #define ID_NUM_LAST_HOUR    "NUM_LAST_HOUR"
 #define ID_NUM_LAST_DAY     "NUM_LAST_DAY"
 #define ID_NUM_LAST_WEEK    "NUM_LAST_WEEK"
@@ -140,23 +142,27 @@
 // monadic, actual states of pump switches and relay
 
 #define STATE_NONE                 0x0000
-#define STATE_PUMP1_ON             0x0001       // the regular pump switch is on
-#define STATE_PUMP2_ON             0x0002       // the emergency pump switch is on
-#define STATE_RELAY_ON             0x0004       // the relay is on
-
-// error states
-
-#define STATE_EMERGENCY            0x0008       // the emergency pump switch was turned on
-#define STATE_TOO_OFTEN_HOUR       0x0010       // error detected
-#define STATE_TOO_OFTEN_DAY        0x0020       // error detected
-#define STATE_TOO_LONG             0x0040       // error detected
-#define STATE_CRITICAL_TOO_LONG    0x0080       // critical error detected
+#define STATE_EMERGENCY            0x0001       // the emergency pump switch was turned on
+#define STATE_PUMP1_ON             0x0002       // the regular pump switch is on
+#define STATE_PUMP2_ON             0x0004       // the emergency pump switch is on
+#define STATE_RELAY_ON             0x0008       // the relay is on
 
 // relay on states
 
-#define STATE_RELAY_FORCED          0x0100      // the relay was forced on or off by the user
-#define STATE_RELAY_EMERGENCY       0x0200      // the relay is on due to the ID_RUN_EMERGENCY value
-#define STATE_RELAY_EXTRA           0x0400      // the relay is on due to the ID_EXTRA_RUN_TIME value
+#define STATE_RELAY_FORCED         0x0010      // the relay was forced on or off by the user
+#define STATE_RELAY_EMERGENCY      0x0020      // the relay is on due to the ID_RUN_EMERGENCY value
+#define STATE_RELAY_EXTRA          0x0040      // the relay is on due to the ID_EXTRA_RUN_TIME value
+
+#define RELAY_STATE_ANY            (STATE_RELAY_FORCED | STATE_RELAY_EMERGENCY | STATE_RELAY_EXTRA)
+
+// error states
+
+#define STATE_TOO_OFTEN_HOUR       0x0080       // error detected
+#define STATE_TOO_OFTEN_DAY        0x0100       // error detected
+#define STATE_TOO_LONG             0x0200       // error detected
+#define STATE_CRITICAL_TOO_LONG    0x0400       // critical error detected
+
+
 
 #define ALARM_ENABLED    0
 #define ALARM_SILENT     1
@@ -198,6 +204,9 @@ public:
     static void clearHistory();
     static void selfTest();
     static bool inSelfTest()         { return m_in_self_test; }
+
+    static time_t   _hour_cutoff;
+    static time_t   _day_cutoff;
 
 private:
 
@@ -251,7 +260,6 @@ private:
     static uint32_t m_pump2_debounce_time;
     static uint32_t m_relay_delay_time;
     static uint32_t m_relay_time;
-    static bool     m_suppress_next_after;
     static bool     m_in_self_test;
 
     // methods
@@ -268,6 +276,8 @@ private:
     static void setAlarmState(uint32_t alarm_state);
     static void addAlarmState(uint32_t alarm_state);
     static void clearAlarmState(uint32_t alarm_state);
+
+    static bool debounceSwitch(int pump_num, uint32_t now, int pin, bool was_on, uint32_t *p_debounce_time);
 
     static void onForceRelay(const myIOTValue *desc, bool val);
     static void onDisabled(const myIOTValue *desc, bool val);

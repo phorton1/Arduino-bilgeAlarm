@@ -230,7 +230,6 @@ uiScreen::uiScreen(int *button_pins)
     m_activity_time = 0;
 
     m_hist_num = 0;
-    m_hist_iter = 0;
     m_hist_ptr = NULL;
 
     m_value_num = 0;
@@ -832,9 +831,8 @@ void uiScreen::setScreen(int screen_num)
 
         case SCREEN_HISTORY_BASE:
             m_hist_num = 0;
-            m_hist_iter = 0;
-            ba_history.initIterator(&m_hist_iter);
-            print_lcd(0,n0,ba_history.countRuns(COUNT_ALL));
+            m_hist_ptr = 0;
+            print_lcd(0,n0,ba_history.numItems());
             print_lcd(1,n1);
             break;
         case SCREEN_HISTORY:
@@ -1047,45 +1045,40 @@ bool uiScreen::onButton(int button_num, int event_type)
         }
         else if (button_num == 1)
         {
-            m_hist_ptr = ba_history.getNext(&m_hist_iter);
-            if (m_hist_ptr)
+            int num = ba_history.numItems();
+            m_hist_num++;   // one based
+            if (m_hist_num > num)
             {
-                m_hist_num++;
-                setScreen(SCREEN_HISTORY);
+                setScreen(SCREEN_HISTORY_BASE);
             }
             else
             {
-                setScreen(SCREEN_HISTORY_BASE);
+                m_hist_ptr = ba_history.getItem(m_hist_num - 1);
+                setScreen(SCREEN_HISTORY);
             }
         }
         else if (button_num == 0 || button_num == 2)
         {
             if (m_screen_num == SCREEN_HISTORY_BASE)
             {
-                m_hist_num = 0;
-                m_hist_iter = 0;
-                int iter;
-                ba_history.initIterator(&iter);
-                const runHistory_t *ptr = ba_history.getNext(&iter);
-                while (ptr)
+                m_hist_num = 1; // one based
+                int num = ba_history.numItems();
+                if (m_hist_num > num)
                 {
-                    m_hist_num++;
-                    m_hist_ptr = ptr;
-                    m_hist_iter = iter;
-                    ptr = ba_history.getNext(&iter);
-                }
-
-                if (m_hist_num)
-                    setScreen(SCREEN_HISTORY);
-                else
                     setScreen(SCREEN_HISTORY_BASE);
+                }
+                else
+                {
+                    m_hist_ptr = ba_history.getItem(m_hist_num - 1);
+                    setScreen(SCREEN_HISTORY);
+                }
             }
             else
             {
-                m_hist_ptr = ba_history.getPrev(&m_hist_iter);
-                if (m_hist_ptr)
+                if (m_hist_num > 1)
                 {
                     m_hist_num--;
+                    m_hist_ptr = ba_history.getItem(m_hist_num - 1);
                     setScreen(SCREEN_HISTORY);
                 }
                 else

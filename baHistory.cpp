@@ -13,7 +13,7 @@
 #include <myIOTLog.h>
 #include <SD.h>
 
-#define DEBUG_HIST  0
+#define DEBUG_COUNT  0
 
 #define TEST_TIMES  0
     // define allows me to test in compressed time where
@@ -21,13 +21,8 @@
 
 #define HIST_DB_FILENAME    "/run_history.dat"
 
-
-time_t baHistory::m_start_duration;
-int baHistory::m_run_head;
-int baHistory::m_prev_head;
-time_t baHistory::m_clear_day_time;
-time_t baHistory::m_clear_hour_time;
-runHistory_t baHistory::m_run_history[MAX_RUN_HISTORY];
+int baHistory::m_num_items;
+historyItem_t baHistory::m_history[MAX_RUN_HISTORY];
 
 baHistory ba_history;
 
@@ -35,11 +30,8 @@ baHistory ba_history;
 void baHistory::init()
     // initialize memory variables
 {
-    m_run_head = 0;
-    m_prev_head = -1;
-    m_clear_day_time = 0;
-    m_clear_hour_time = 0;
-    memset(m_run_history,0,MAX_RUN_HISTORY * sizeof(runHistory_t));
+    m_num_items = 0;
+    memset(m_history,0,MAX_RUN_HISTORY * sizeof(historyItem_t));
 }
 
 
@@ -71,9 +63,6 @@ void baHistory::clearHistory()
 
 
 void baHistory::initHistory()
-    // initialize from the file if exists.  This should set last_run and duration as well,
-    // and it would be nice if it also could retrieve the "time windows" for error handling
-    // to prevent re-alarm after reboot.
 {
     LOGI("baHistory::initHistory()");
     proc_entry();
@@ -83,7 +72,7 @@ void baHistory::initHistory()
     #if WITH_SD
         if (!bilgeAlarm::hasSD())
         {
-            LOGE("NO SD CARD in baHistory::initRTCMemory(DATABASE_ON_SD)");
+            LOGW("NO SD CARD in initHistory()");
         }
         else if (SD.exists(HIST_DB_FILENAME))
         {
@@ -95,15 +84,12 @@ void baHistory::initHistory()
             }
             else
             {
-                uint32_t pos = 0;
                 uint32_t size = file.size();
-                uint32_t amt = size;
-                uint32_t max = (MAX_RUN_HISTORY-1) * sizeof(runHistory_t);
-                if (size > max)
-                {
-                    pos = size - max;
-                    amt = max;
-                }
+                uint32_t num = size / sizeof(historyItem_t);
+                if (num > MAX_RUN_HISTORY-1)
+                    num = MAX_RUN_HISTORY-1;
+                uint32_t amt = num * sizeof(historyItem_t);
+                uint32_t pos = size - amt;
 
                 LOGD("reading %d bytes from %s(%d) at pos=%d",amt,HIST_DB_FILENAME,size,pos);
                 if (!file.seek(pos))
@@ -112,7 +98,7 @@ void baHistory::initHistory()
                 }
                 else
                 {
-                    uint32_t got = file.read((uint8_t *)&m_run_history, amt);
+                    uint32_t got = file.read((uint8_t *)&m_history, amt);
                     if (got != amt)
                     {
                         LOGE("Error reading SD %s expected %d got %d",HIST_DB_FILENAME,amt,got);
@@ -120,9 +106,8 @@ void baHistory::initHistory()
                     }
                     else
                     {
-                        int num = amt/sizeof(runHistory_t);
                         LOGD("got %d runs from SD %s",num,HIST_DB_FILENAME);
-                        m_run_head = num;
+                        m_num_items = num;
                     }
                 }
                 file.close();
@@ -139,55 +124,28 @@ void baHistory::initHistory()
 
 
 
-
-
-uint32_t baHistory::getStartDuration() const
+void baHistory::addHistory(uint32_t dur, uint16_t flags)
 {
-    return m_start_duration;
-}
+    proc_entry();
 
-
-void baHistory::setRunFlags(uint16_t flags)
-{
-    m_run_history[m_prev_head].flags |= flags;
-}
-
-
-void baHistory::updateStartDuration()
-{
-    m_start_duration = time(NULL);
-}
-
-
-void baHistory::startRun(uint16_t flags /* =0 */)
-{
     time_t now = time(NULL);
-    m_start_duration = now;
-    LOGU("PUMP ON(%d)",m_run_head);
-    runHistory_t *ptr = &m_run_history[m_run_head];
-    ptr->tm = now;
-    ptr->dur = 0;
+    LOGD("addHistory[%d] dur(%d) flags(0x%04x) %s",m_num_items,dur,flags,timeToString(now).c_str());
+
+    if (m_num_items >= MAX_RUN_HISTORY)
+    {
+        memcpy(&m_history[0],&m_history[1],(MAX_RUN_HISTORY-1) * sizeof(historyItem_t));
+        m_num_items--;
+    }
+
+    historyItem_t *ptr = &m_history[m_num_items++];
+    ptr->tm = time(NULL);
+    ptr->dur = dur;
     ptr->flags = flags;
-    m_prev_head = m_run_head;
-    m_run_head++;
-    if (m_run_head >= MAX_RUN_HISTORY)
-        m_run_head = 0;
-}
-
-
-uint32_t baHistory::endRun()
-{
-    time_t now = time(NULL);
-    int duration = now - m_start_duration + 1;
-    LOGU("PUMP OFF(%d) %d secs",m_prev_head,duration);
-    runHistory_t *ptr = &m_run_history[m_prev_head];
-    ptr->dur = duration;
-    m_start_duration = 0;
 
     #if WITH_SD
         if (!bilgeAlarm::hasSD())
         {
-            LOGE("NO SD CARD in baHistory::endRun(DATABASE_ON_SD)");
+            LOGW("NO SD CARD in addHistory()");
         }
         else
         {
@@ -198,124 +156,67 @@ uint32_t baHistory::endRun()
             }
             else
             {
-                file.write((const uint8_t *)ptr,sizeof(runHistory_t));
+                file.write((const uint8_t *)ptr,sizeof(historyItem_t));
                 file.close();
             }
         }
     #endif
 
-    return duration;
+    proc_leave();
 }
 
 
-
-void baHistory::initIterator(int *iterator) const
+void baHistory::countRuns(int add, int *hour_count, int *day_count, int *week_count)
 {
-    *iterator = m_run_head;
-}
+    proc_entry();
 
+    *hour_count = add;
+    *day_count = add;
+    *week_count = add;
 
-const runHistory_t *baHistory::getNext(int *iterator) const
-{
-    int head = *iterator;
-    head -= 1;
-    if (head < 0)
-        head = MAX_RUN_HISTORY-1;
-    if (head == m_run_head)
-        return NULL;
-    if (!m_run_history[head].tm)
-        return NULL;
+    if (!m_num_items)
+        return;
 
-    *iterator = head;
-    return &m_run_history[head];
-}
-
-
-const runHistory_t *baHistory::getPrev(int *iterator) const
-{
-    int head = *iterator;
-    head++;
-    if (head >=  MAX_RUN_HISTORY)
-        head = 0;
-    if (head == m_run_head)
-        return NULL;
-    if (!m_run_history[head].tm)
-        return NULL;
-    *iterator = head;
-    return &m_run_history[head];
-}
-
-
-
-int baHistory::countRuns(int count_how) const
-{
-    // LOGD("countRuns(%d) m_run_head=%d",hours,m_run_head);
-    // can't really debug in here since it is called every second
-
-    uint32_t cutoff = 0;        // COUNT_ALL
     time_t now = time(NULL);
 
-    if (count_how == COUNT_WEEK)
-    {
-        cutoff = now - (TEST_TIMES ? (5 * 60) : (7 * 24 * 60 * 60));
-    }
-    else if (count_how == COUNT_DAY)
-    {
-        cutoff = now - (TEST_TIMES ? (3 * 60) : (24 * 60 * 60));
-        if (m_clear_day_time > cutoff)
-            cutoff = m_clear_day_time;
-    }
-    else if (count_how == COUNT_HOUR)
-    {
-        cutoff = now - (TEST_TIMES ? (1 * 60) : (60 * 60));
-        if (m_clear_hour_time > cutoff)
-            cutoff = m_clear_hour_time;
-    }
+    uint32_t week_cutoff = now - (7 * 24 * 60 * 60);
+    uint32_t day_cutoff  = now - (24 * 60 * 60);
+    uint32_t hour_cutoff = now - (60 * 60);
+    if (day_cutoff < bilge_alarm->_day_cutoff)
+        day_cutoff = bilge_alarm->_day_cutoff;
+    if (hour_cutoff < bilge_alarm->_hour_cutoff)
+        hour_cutoff = bilge_alarm->_hour_cutoff;
 
-    int iter = 0;
-    int count = 0;
-    initIterator(&iter);
-    const runHistory_t *ptr = getNext(&iter);
-
-    while (ptr && ptr->tm >= cutoff)
-    {
-        count++;
-        ptr = getNext(&iter);
-    }
-
-    return count;
-}
-
-
-void baHistory::setCountWindow(int type, int num)
-{
-    #if DEBUG_HIST
-        LOGD("setCountWindow(%d,%d)",type,num);
+    #if DEBUG_COUNT
+        LOGD("week_cutoff(%d) day_cutoff(%d) hour_cutoff(%d)",week_cutoff,day_cutoff,hour_cutoff);
     #endif
 
-    int iter = 0;
-    int count = 0;
-    initIterator(&iter);
-    const runHistory_t *ptr = getNext(&iter);
-
-    while (ptr)
+    bool done = 0;
+    for (int i=0; i<m_num_items && !done; i++)
     {
-        count++;
-        if (count >= num)
-            break;
-        ptr = getNext(&iter);
+        const historyItem_t *ptr = getItem(i);
+        if (ptr->tm >= week_cutoff)
+        {
+            (*week_count)++;
+            if (ptr->tm >= day_cutoff)
+                (*day_count)++;
+            if (ptr->tm >= hour_cutoff)
+                (*hour_count)++;
+        }
+        else
+        {
+            done = 1;
+        }
+
+        #if DEBUG_COUNT
+            LOGD("done(%d) item(%s) dur(%d) tm(%d) week(%d) day(%d) month(%d)",
+                 done,timeToString(ptr->tm).c_str(),ptr->dur,ptr->tm,*week_count,*day_count,*hour_count);
+        #endif
     }
 
-    time_t rslt = ptr ? ptr->tm : 0;
-    LOGU("setCountWindow(%d,%d)=%s",type,num,timeToString(rslt).c_str());
-    if (type == COUNT_DAY)
-        m_clear_day_time = rslt;
-    else
-        m_clear_hour_time = rslt;
+    proc_leave();
+
 }
-
-
-
 
 
 
@@ -334,73 +235,71 @@ String baHistory::getHistoryHTML() const
     rslt += "th, td { padding-left: 12px; padding-right: 12px; }\n";
     rslt += "</style>\n";
 
-    int iter = 0;
-    int count = 0;
-    initIterator(&iter);
-    const runHistory_t *ptr = getNext(&iter);
-
-    while (ptr)
+    if (m_num_items)
     {
-        count++;
-        if (count == 1)
+        rslt += "<b>";
+        rslt += String(m_num_items);
+        rslt += " ";
+        rslt +=  bilge_alarm->getName();
+        rslt += " History Items</b><br><br>\n";
+        rslt += "<table border='1' padding='6' style='border-collapse:collapse'>\n";
+        rslt += "<tr><th>num</th><th>time</th><th>dur</th><th>ago</th></th><th>flags</th></tr>\n";
+
+        int count = 0;
+        for (int i=0; i<m_num_items; i++)
         {
-            rslt += "<b>";
-            rslt += String(countRuns(COUNT_ALL));
-            rslt += " ";
-            rslt +=  bilge_alarm->getName();
-            rslt += " History Items</b><br><br>\n";
-            rslt += "<table border='1' padding='6' style='border-collapse:collapse'>\n";
-            rslt += "<tr><th>num</th><th>time</th><th>dur</th><th>ago</th></th><th>flags</th></tr>\n";
-        }
+             count++;
+             const historyItem_t *ptr = getItem(i);
 
-        rslt += "<tr><td>";
-        rslt += String(count);
-        rslt += "  (";
-        rslt += String(iter);
-        rslt += ")";
-        rslt += "</td><td>";
-        rslt += timeToString(ptr->tm);
-        rslt += "</td><td align='center'>";
-        rslt += String(ptr->dur);
-        rslt += "</td><td>";
+            rslt += "<tr><td>";
+            rslt += String(count);
+            rslt += "  (";
+            rslt += String(i);
+            rslt += ")";
+            rslt += "</td><td>";
+            rslt += timeToString(ptr->tm);
+            rslt += "</td><td align='center'>";
+            rslt += String(ptr->dur);
+            rslt += "</td><td>";
 
-        // anything over a 5 years year is considered invalid to deal with potential lack of clock issues
+            // anything over a 5 years year is considered invalid to deal with potential lack of clock issues
 
-        char buf[128] = "&nbsp;";
-        uint32_t since = time(NULL) - ptr->tm;
-        if (since < 5 * 365 * 24 * 60 * 60)
-        {
-            int days = since / (24 * 60 * 60);
-            int hours = ((since % (24 * 60 * 60)) / (60 * 60)) % 24;
-            int minutes = ((since % (24 * 60 * 60 * 60)) / 60) % 60;
-            int secs = since % 60;
-            if (days)
+            char buf[128] = "&nbsp;";
+            uint32_t since = time(NULL) - ptr->tm;
+            if (since < 5 * 365 * 24 * 60 * 60)
             {
-                sprintf(buf,"%d days  %02d:%02d:%02d",days, hours, minutes, secs);
+                int days = since / (24 * 60 * 60);
+                int hours = ((since % (24 * 60 * 60)) / (60 * 60)) % 24;
+                int minutes = ((since % (24 * 60 * 60 * 60)) / 60) % 60;
+                int secs = since % 60;
+                if (days)
+                {
+                    sprintf(buf,"%d days  %02d:%02d:%02d",days, hours, minutes, secs);
+                }
+                else
+                {
+                    sprintf(buf,"%02d:%02d:%02d",hours, minutes, secs);
+                }
             }
-            else
-            {
-                sprintf(buf,"%02d:%02d:%02d",hours, minutes, secs);
-            }
-        }
-        rslt += buf;
+            rslt += buf;
 
-        rslt += "</td><td align='center'>";
+            rslt += "</td><td align='center'>";
 
-        if (ptr->flags & STATE_EMERGENCY) rslt += "EMERGENCY ";
-        if (ptr->flags & STATE_CRITICAL_TOO_LONG) rslt += "WAY TOO LONG ";
-        else if (ptr->flags & STATE_TOO_LONG) rslt += "TOO LONG ";
-        if (ptr->flags & STATE_TOO_OFTEN_HOUR) rslt += "TOO OFTEN ";
-        if (ptr->flags & STATE_TOO_OFTEN_DAY) rslt += "TOO OFTEN DAY";
-        rslt += "</td></tr>\n";
+            if (ptr->flags & STATE_EMERGENCY) rslt += "EMERGENCY ";
+            if (ptr->flags & STATE_CRITICAL_TOO_LONG) rslt += "WAY TOO LONG ";
+            else if (ptr->flags & STATE_TOO_LONG) rslt += "TOO LONG ";
+            if (ptr->flags & STATE_TOO_OFTEN_HOUR) rslt += "TOO OFTEN ";
+            if (ptr->flags & STATE_TOO_OFTEN_DAY) rslt += "TOO OFTEN DAY";
+            rslt += "</td></tr>\n";
 
-        ptr = getNext(&iter);
-    }
+        }   // for each item
 
-    if (!count)
-        rslt += "THERE IS NO HISTORY OF PUMP RUNS AT THIS TIME\n";
-    else
         rslt += "</table>";
+    }
+    else
+    {
+        rslt += "THERE IS NO HISTORY OF PUMP RUNS AT THIS TIME\n";
+    }
 
     rslt += "</body>\n";
     return rslt;
