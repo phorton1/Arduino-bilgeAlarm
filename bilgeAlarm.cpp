@@ -648,7 +648,7 @@ bool bilgeAlarm::debounceSwitch(int pump_num, uint32_t now, int pin, bool was_on
             return was_on;
         }
         *p_debounce_time = 0;
-        LOGU("PUMP%d_%s raw(%d)",pump_num,raw_on?"ON":"OFF",raw);
+        LOGD("pump%d_%s raw(%d)",pump_num,raw_on?"on":"off",raw);
         return raw_on;
     }
 
@@ -716,6 +716,7 @@ void bilgeAlarm::stateMachine()
         if (pump2_on)
         {
             bool was_emergency = save_state & STATE_EMERGENCY;
+            LOGU("PUMP2 ON");
             uint32_t new_state = _state | STATE_PUMP2_ON | STATE_EMERGENCY;
 
             if (_disabled != ALARM_DISABLED && !was_emergency)
@@ -740,6 +741,7 @@ void bilgeAlarm::stateMachine()
         else
         {
             // LOGW("clearing emergency _alarm_state=0x%02x",_alarm_state);
+            LOGU("PUMP2 OFF");
             clearState(STATE_PUMP2_ON);
             if (_alarm_state & ALARM_STATE_EMERGENCY)
             {
@@ -761,16 +763,20 @@ void bilgeAlarm::stateMachine()
     //-----------------------------
     // PUMP1
     //-----------------------------
+    // We have to be careful about thinking pump1 has
+    // turned on when we actually turned it on with the RELAY.
 
     if (was_on1 != pump1_on)
     {
         if (pump1_on)
         {
+            if (!(save_state & STATE_RELAY_ON))
+                LOGU("PUMP1 ON");
             addState(STATE_PUMP1_ON);
             if (_disabled != ALARM_DISABLED &&
                 _extra_run_time &&
                 !_extra_run_mode &&
-                !(_state & (STATE_RELAY_FORCED | STATE_RELAY_EMERGENCY)))
+                !(_state & (STATE_PUMP2_ON | STATE_RELAY_ON | RELAY_STATE_ANY)))
             {
                 LOGU("EXTRA RELAY ON");
                 addState(STATE_RELAY_EXTRA);
@@ -780,13 +786,14 @@ void bilgeAlarm::stateMachine()
         }
         else
         {
+            LOGU("PUMP1 OFF");
             clearState(STATE_PUMP1_ON);
             if (_disabled != ALARM_DISABLED &&
                 _extra_run_time &&
                 _extra_run_mode &&
-                !(_state & (STATE_RELAY_FORCED | STATE_RELAY_EMERGENCY)))
+                !(_state & (STATE_PUMP2_ON | STATE_RELAY_ON | RELAY_STATE_ANY)))
             {
-                LOGU("DELAYING RELAY");
+                LOGD("delaying relay");
                 addState(STATE_RELAY_EXTRA);
                 m_relay_time = 0;
                 m_relay_delay_time = now + _extra_run_delay;
@@ -838,9 +845,9 @@ void bilgeAlarm::stateMachine()
         if (m_relay_delay_time &&
             now >= m_relay_delay_time)
         {
-            m_relay_time = now + _extra_run_time * 1000;
             m_relay_delay_time = 0;
-            LOGU("delayed relay on");
+            m_relay_time = now + _extra_run_time * 1000;
+            LOGD("delayed relay on");
         }
 
         if (m_relay_time &&
@@ -856,13 +863,17 @@ void bilgeAlarm::stateMachine()
     if (m_relay_time && now >= m_relay_time)
     {
         m_relay_time = 0;
+        m_pump1_debounce_time = millis() + _relay_debounce;
         clearState(STATE_RELAY_EMERGENCY | STATE_RELAY_EXTRA);
         if (!(_state & STATE_RELAY_FORCED))
         {
             LOGU("RELAY OFF");
-            clearState(STATE_RELAY_ON);
+            clearState(STATE_RELAY_ON | STATE_PUMP1_ON);
+                // we clear the pump1_on state and set m_pump1_debounce_time
+                // so that we don't immediately get a PUMP1_OFF which triggerw
+                // an endless loop as the off of a delayed relay would otherwise
+                // then start another delayed_relay
             digitalWrite(PIN_RELAY,0);
-            m_pump1_debounce_time = millis() + _relay_debounce;
         }
     }
 
