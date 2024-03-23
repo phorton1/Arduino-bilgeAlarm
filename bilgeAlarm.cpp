@@ -13,6 +13,8 @@
 #define DEBUG_TASK    0
     // set this to slow the task loop down and show
     // values at the top
+#define DEBUG_DEBOUNCE 1
+    // set this to 1 to show debuging of debouncing
 
 
 #define BUTTON_CHECK_TIME  30
@@ -522,6 +524,7 @@ void bilgeAlarm::clearError()
 }
 
 
+
 //---------------------------------------------------
 // "on" handlers
 //---------------------------------------------------
@@ -640,16 +643,29 @@ bool bilgeAlarm::debounceSwitch(int pump_num, uint32_t now, int pin, bool was_on
     {
         if (!*p_debounce_time)
         {
-            *p_debounce_time = now;
+            *p_debounce_time = now + _pump_debounce;
+            #if DEBUG_DEBOUNCE
+                LOGD("debounce pump%d: now(%d) + _pump_debounce(%d) = %d",pump_num,now,_pump_debounce,*p_debounce_time);
+            #endif
             return was_on;
         }
-        if (now - *p_debounce_time < _pump_debounce)
+        if (now < *p_debounce_time)
         {
             return was_on;
         }
-        *p_debounce_time = 0;
         LOGD("pump%d_%s raw(%d)",pump_num,raw_on?"on":"off",raw);
+        #if DEBUG_DEBOUNCE
+            LOGD("    pump%d  now(%d) debounce_time(%d)",pump_num,now,*p_debounce_time);
+        #endif
+        *p_debounce_time = 0;
         return raw_on;
+    }
+    else if (*p_debounce_time && now > *p_debounce_time)
+    {
+        #if DEBUG_DEBOUNCE
+            LOGD("clearing pump%d now(%d) debounce_time(%d)=0",pump_num,now,*p_debounce_time);
+        #endif
+        *p_debounce_time = 0;
     }
 
     return was_on;
@@ -856,14 +872,21 @@ void bilgeAlarm::stateMachine()
             LOGU("RELAY ON");
             addState(STATE_RELAY_ON);
             digitalWrite(PIN_RELAY,1);
-            m_pump1_debounce_time = millis() + _relay_debounce;
+            m_pump1_debounce_time = now + _relay_debounce;
+            #if DEBUG_DEBOUNCE
+                LOGD("    set pump1_debounce_time: now(%d) + _relay_debounce(%d) = %d", now,_relay_debounce,m_pump1_debounce_time);
+            #endif
         }
     }
 
     if (m_relay_time && now >= m_relay_time)
     {
         m_relay_time = 0;
-        m_pump1_debounce_time = millis() + _relay_debounce;
+        m_pump1_debounce_time = now + _relay_debounce;
+        #if DEBUG_DEBOUNCE
+            LOGD("    relay off pump1_debounce_time: now(%d) + _relay_debounce(%d) = %d", now,_relay_debounce,m_pump1_debounce_time);
+        #endif
+
         clearState(STATE_RELAY_EMERGENCY | STATE_RELAY_EXTRA);
         if (!(_state & STATE_RELAY_FORCED))
         {
