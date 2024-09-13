@@ -552,7 +552,7 @@ void bilgeAlarm::onValueChanged(const myIOTValue *value, valueStore from)
 }
 
 
-String bilgeAlarm::onCustomLink(const String &path)
+String bilgeAlarm::onCustomLink(const String &path,  const char **mime_type)
     // called from myIOTHTTP.cpp::handleRequest()
 {
     if (path.startsWith("getHistory"))
