@@ -8,177 +8,249 @@
 // and myIOTDevice::onInitRTCMemory() to keep the history
 // between reboots.
 
-#include "baHistory.h"
 #include "bilgeAlarm.h"
+#include "baHistory.h"
 #include <myIOTLog.h>
+#include <myIOTDataLog.h>
+#include <myIOTWebServer.h>
 #include <SD.h>
 
-#define DEBUG_COUNT  0
+#define DEBUG_COUNT 1
 
-#define TEST_TIMES  0
-    // define allows me to test in compressed time where
-    // one hour == 1 minute, one day=3 minutes, and one week==5 minutes
+#define WITH_AUTO_COVERSION  1
 
-#define HIST_DB_FILENAME    "/run_history.dat"
+#define history_filename "/bilge.datalog"
+    // agrees with myIOTDataLog
 
-int baHistory::m_num_items;
-historyItem_t baHistory::m_history[MAX_RUN_HISTORY];
+typedef struct {    // includes the timestamp
+    uint32_t tm;
+    uint32_t dur;
+    uint32_t flags;
+} historyRec_t;
+
+
+#define BASE_BUF_SIZE   512
+#define HIST_REC_SIZE   sizeof(historyRec_t)
+#define STACK_BUF_SIZE  (((BASE_BUF_SIZE + HIST_REC_SIZE-1) / HIST_REC_SIZE) * HIST_REC_SIZE)
+
+logColumn_t  bilge_cols[] = {
+    {"dur",	    LOG_COL_TYPE_UINT32,	10,	},
+    {"flags",	LOG_COL_TYPE_UINT32,	1,	},
+};
+
 
 baHistory ba_history;
+myIOTDataLog data_log("bilge",2,bilge_cols);
 
 
-void baHistory::init()
-    // initialize memory variables
-{
-    m_num_items = 0;
-    memset(m_history,0,MAX_RUN_HISTORY * sizeof(historyItem_t));
-}
+#if WITH_AUTO_COVERSION
 
+    typedef struct {
+        time_t  tm;
+        uint16_t dur;
+        uint16_t flags;
+    } oldHistoryRec_t;
 
-void baHistory::clearHistory()
-{
-    LOGI("baHistory::clearHistory()");
-    proc_entry();
+    #define old_history_filename "/run_history.dat"
 
-    #if WITH_SD
-        if (!bilgeAlarm::hasSD())
+    void oneTimeConvertHistory()
+    {
+        int old_size = sizeof(oldHistoryRec_t);
+        int new_size = sizeof(historyRec_t);
+
+        LOGW("oneTimeConvertHistory() old_size(%d) new_size(%d)",old_size,new_size);
+        File old_file = SD.open(old_history_filename, FILE_READ);
+        if (!old_file)
         {
-            LOGE("NO SD CARD in baHistory::clearHistory(DATABASE_ON_SD)");
+            LOGE("Could not open %s for reading",old_history_filename);
+            return;
         }
-        else if (SD.exists(HIST_DB_FILENAME))
+        File new_file = SD.open(history_filename, FILE_WRITE);
+        if (!new_file)
         {
-            LOGW("clearing baHistory from SD %s",HIST_DB_FILENAME);
-            SD.remove(HIST_DB_FILENAME);
+            old_file.close();
+            LOGE("Could not open %s for reading",old_history_filename);
+            return;
         }
-        else
+        int num_recs = old_file.size() / old_size;
+        LOGD("    converting %d records",num_recs);
+
+        int old_at = 0;
+        int new_at = 0;
+        oldHistoryRec_t old_rec;
+        historyRec_t new_rec;
+        for (int i=0; i<num_recs; i++)
         {
-            LOGD("Note: SD %s not found",HIST_DB_FILENAME);
+            int bytes = old_file.read((uint8_t *)&old_rec,old_size);
+            if (bytes != old_size)
+            {
+                LOGE("error reading(%d/%d) at(%d) from %s",
+                     bytes,
+                     old_size,
+                     old_at,
+                     old_history_filename);
+                old_file.close();
+                new_file.close();
+                return;
+            }
+            old_at += old_size;
+
+            new_rec.tm = old_rec.tm;
+            new_rec.dur = old_rec.dur;
+            new_rec.flags = 0;
+
+            if (old_rec.flags & STATE_TOO_OFTEN_HOUR)
+                new_rec.flags |= HIST_STATE_TOO_OFTEN_HOUR;
+            if (old_rec.flags & STATE_TOO_OFTEN_DAY)
+                new_rec.flags |= HIST_STATE_TOO_OFTEN_DAY;
+            if (old_rec.flags & STATE_TOO_LONG)
+                new_rec.flags |= HIST_STATE_TOO_LONG;
+            if (old_rec.flags & STATE_CRITICAL_TOO_LONG)
+                new_rec.flags |= HIST_STATE_CRITICAL_TOO_LONG;
+            if (old_rec.flags & STATE_EMERGENCY)
+                new_rec.flags |= HIST_STATE_EMERGENCY;
+
+            bytes = new_file.write((uint8_t *)&new_rec,new_size);
+            if (bytes != new_size)
+            {
+                LOGE("error write(%d/%d) at(%d) to %s",
+                     bytes,
+                     new_size,
+                     new_at,
+                     history_filename);
+                old_file.close();
+                new_file.close();
+                return;
+            }
+            new_at += new_size;
         }
-    #endif
 
-    init();
-    proc_leave();
-}
-
+        old_file.close();
+        new_file.close();
+        LOGD("    oneTimeConvertHistory() wrote %d bytes to %s",new_at,history_filename);
+    }
+#endif  // WITH_CONVERSION
 
 
 void baHistory::initHistory()
+    // initialize the history from the SD file if it exists
 {
     LOGI("baHistory::initHistory()");
-    proc_entry();
+    
+    if (!bilgeAlarm::hasSD())
+    {
+        LOGE("NO SD CARD in baHistory::initHistory()");
+        return;
+    }
 
-    init();
+#if WITH_AUTO_COVERSION
+    if (SD.exists(old_history_filename) &&
+        !SD.exists(history_filename))
+        oneTimeConvertHistory();
+#endif
 
-    #if WITH_SD
-        if (!bilgeAlarm::hasSD())
+    // get the last history from the SD file, if any, and use it
+    // to set the bilge alarm last_run values, and also call
+    // count runs the first time to set up those values
+
+    File file = SD.open(history_filename,FILE_READ);
+    if (file)
+    {
+        bool ok = 1;
+        historyRec_t rec;
+        uint32_t size = file.size();
+        if (size >= HIST_REC_SIZE)
         {
-            LOGW("NO SD CARD in initHistory()");
-        }
-        else if (SD.exists(HIST_DB_FILENAME))
-        {
-            LOGW("initing baHistory from SD %s",HIST_DB_FILENAME);
-            File file = SD.open(HIST_DB_FILENAME, FILE_READ);
-            if (!file)
+            uint32_t at = size - HIST_REC_SIZE;
+            if (!file.seek(at))
             {
-                LOGE("Could not open SD %s for reading",HIST_DB_FILENAME);
+                LOGE("baHistory not seek(%d) in %s",at,history_filename);
+                ok = 0;
             }
             else
             {
-                uint32_t size = file.size();
-                uint32_t num = size / sizeof(historyItem_t);
-                if (num > MAX_RUN_HISTORY-1)
-                    num = MAX_RUN_HISTORY-1;
-                uint32_t amt = num * sizeof(historyItem_t);
-                uint32_t pos = size - amt;
-
-                LOGD("reading %d bytes from %s(%d) at pos=%d",amt,HIST_DB_FILENAME,size,pos);
-                if (!file.seek(pos))
+                int bytes = file.read((uint8_t *)&rec,HIST_REC_SIZE);
+                if (bytes != HIST_REC_SIZE)
                 {
-                    LOGE("Could not seek(%d) in SD %s",pos,HIST_DB_FILENAME);
+                    LOGE("baHistory read error(%d/%d) at %d in %s",bytes,HIST_REC_SIZE,at,history_filename);
+                    ok = 0;
                 }
                 else
                 {
-                    uint32_t got = file.read((uint8_t *)&m_history, amt);
-                    if (got != amt)
-                    {
-                        LOGE("Error reading SD %s expected %d got %d",HIST_DB_FILENAME,amt,got);
-                        init();
-                    }
-                    else
-                    {
-                        LOGD("got %d runs from SD %s",num,HIST_DB_FILENAME);
-                        m_num_items = num;
-                    }
+                    LOGD("initializing last_run to %s dur %d",timeToString(rec.tm).c_str(),rec.dur);
+                    bilge_alarm->_time_last_run = rec.tm;
+                    bilge_alarm->_since_last_run = (int32_t) rec.tm;
+                    bilge_alarm->_dur_last_run = rec.dur;
                 }
-                file.close();
             }
-        }
-        else
-        {
-            LOGD("Note: SD %s not found",HIST_DB_FILENAME);
-        }
-    #endif
+            file.close();
 
-    proc_leave();
-}
+            if (ok)
+                ba_history.countRuns(0);
 
+        }   // size > 0
+    }   // file opened
+}   // initHistory()
 
 
-void baHistory::addHistory(uint32_t dur, uint16_t flags)
+
+void baHistory::clearHistory()
+    // clear the history
 {
-    proc_entry();
-
-    time_t now = time(NULL);
-    LOGD("addHistory[%d] dur(%d) flags(0x%04x) %s",m_num_items,dur,flags,timeToString(now).c_str());
-
-    if (m_num_items >= MAX_RUN_HISTORY)
+    LOGI("baHistory::clearHistory()");
+    if (!bilgeAlarm::hasSD())
     {
-        memcpy(&m_history[0],&m_history[1],(MAX_RUN_HISTORY-1) * sizeof(historyItem_t));
-        m_num_items--;
+        LOGE("NO SD CARD in baHistory::clearHistory(DATABASE_ON_SD)");
     }
-
-    historyItem_t *ptr = &m_history[m_num_items++];
-    ptr->tm = time(NULL);
-    ptr->dur = dur;
-    ptr->flags = flags;
-
-    #if WITH_SD
-        if (!bilgeAlarm::hasSD())
-        {
-            LOGW("NO SD CARD in addHistory()");
-        }
-        else
-        {
-            File file = SD.open(HIST_DB_FILENAME, FILE_APPEND);
-            if (!file)
-            {
-                LOGE("Could not open SD %s for append",HIST_DB_FILENAME);
-            }
-            else
-            {
-                file.write((const uint8_t *)ptr,sizeof(historyItem_t));
-                file.close();
-            }
-        }
-    #endif
-
-    proc_leave();
+    else if (SD.exists(history_filename))
+    {
+        LOGW("clearing baHistory from SD %s",history_filename);
+        SD.remove(history_filename);
+    }
+    else
+    {
+        LOGD("Note: SD %s not found",history_filename);
+    }
 }
 
 
-void baHistory::countRuns(int add, int *hour_count, int *day_count, int *week_count)
+
+void baHistory::addHistory(uint32_t dur, uint32_t flags)
 {
-    proc_entry();
+    LOGD("baHistory::addHistory(%d,%d)",dur,flags);
+    
+    historyRec_t rec;
+    rec.dur = dur;
+    rec.flags = flags;
+    data_log.addRecord((logRecord_t) &rec);
+}
 
-    *hour_count = add;
-    *day_count = add;
-    *week_count = add;
 
-    if (!m_num_items)
-        return;
 
+bool baHistoryCondition(uint32_t cutoff, uint8_t *rec_ptr)
+{
+    uint32_t tm = *((uint32_t *)rec_ptr);
+    if (tm >= cutoff)
+        return true;
+    #if 0
+        String dt1 = timeToString(tm);
+        String dt2 = timeToString(cutoff);
+        LOGD("baHistoryCondition(FALSE) at %s < %s",dt1.c_str(),dt2.c_str());
+    #endif
+    return false;
+}
+
+
+void baHistory::countRuns(int add)
+    // 'add' is a reminder that we are about to add a new item in the main task
+    // and want the count as if it was already added; uses _hour_cutoff and
+    // day cutoff to limit returns for the bilgeAlarm to be able to 'clear'
+    // those particular errors.
+    //
+    // There are only bad choices if there is an error on the SD card.
+    // We don't mess with the num_last_ variables if so.
+{
     time_t now = time(NULL);
-
     uint32_t week_cutoff = now - (7 * 24 * 60 * 60);
     uint32_t day_cutoff  = now - (24 * 60 * 60);
     uint32_t hour_cutoff = now - (60 * 60);
@@ -187,85 +259,140 @@ void baHistory::countRuns(int add, int *hour_count, int *day_count, int *week_co
     if (hour_cutoff < bilge_alarm->_hour_cutoff)
         hour_cutoff = bilge_alarm->_hour_cutoff;
 
+    SDBackwards_t iter;
+    uint8_t stack_buffer[STACK_BUF_SIZE];
+    iter.chunked        = 1;
+    iter.client_data    = week_cutoff;                  // cutoff dt
+    iter.filename       = history_filename;
+    iter.rec_size       = HIST_REC_SIZE;                // 12 bytes
+    iter.record_fxn     = baHistoryCondition;
+    iter.buffer         = stack_buffer;                 // an even multiple of rec_size
+    iter.buf_size       = STACK_BUF_SIZE;
+    iter.dbg_level      = 1;                            // 0..2
+
+	if (!startSDBackwards(&iter))
+		return;
+
+    // the file is at least open at this point,
+    // so, we reset the actual values
+
+    bilge_alarm->_num_last_hour = add;
+    bilge_alarm->_num_last_day = add;
+    bilge_alarm->_num_last_week = add;
+
+    // and commence with counting
+    
+	int num_recs;
+	const historyRec_t *base_rec = (const historyRec_t *) getSDBackwards(&iter,&num_recs);
+	while (num_recs)
+	{
+        for (int i=num_recs-1; i>=0; i--)
+        {
+            const historyRec_t *rec = &base_rec[i];
+            bilge_alarm->_num_last_week++;
+            if (rec->tm >= day_cutoff)
+                bilge_alarm->_num_last_day++;
+            if (rec->tm >= hour_cutoff)
+                bilge_alarm->_num_last_hour++;
+        }
+ 		base_rec = (const historyRec_t *) getSDBackwards(&iter,&num_recs);
+	}
+
+    if (iter.file)
+        iter.file.close();
+
     #if DEBUG_COUNT
-        LOGD("week_cutoff(%d) day_cutoff(%d) hour_cutoff(%d)",week_cutoff,day_cutoff,hour_cutoff);
+        LOGD("baHistory::countRuns(%d) returning hour(%d) day(%d) week(%d)",
+            add,
+            bilge_alarm->_num_last_hour,
+            bilge_alarm->_num_last_day,
+            bilge_alarm->_num_last_week);
     #endif
-
-    bool done = 0;
-    for (int i=0; i<m_num_items && !done; i++)
-    {
-        const historyItem_t *ptr = getItem(i);
-        if (ptr->tm >= week_cutoff)
-        {
-            (*week_count)++;
-            if (ptr->tm >= day_cutoff)
-                (*day_count)++;
-            if (ptr->tm >= hour_cutoff)
-                (*hour_count)++;
-        }
-        else
-        {
-            done = 1;
-        }
-
-        #if DEBUG_COUNT
-            LOGD("done(%d) item(%s) dur(%d) tm(%d) week(%d) day(%d) month(%d)",
-                 done,timeToString(ptr->tm).c_str(),ptr->dur,ptr->tm,*week_count,*day_count,*hour_count);
-        #endif
-    }
-
-    proc_leave();
-
 }
 
 
 
+
 String baHistory::getHistoryHTML() const
-    // building this on the stack ?!?!?
-    // PRH - should test this with 256 entries
-    // would be better to be able to write this
-    // to the socket. web_server.streamFile(file, getContentType(path));
+    // not much difference in memory between chunked and non-chunked
+    // if fact non-chunked may fragment memory more leading to less
+    // available, but not necessarily a lower water mark.
 {
-    String rslt = "<head>\n";
-    rslt += "<title>";
-    rslt += bilge_alarm->getName();
-    rslt += " History =</title>\n";
-    rslt += "<body>\n";
-    rslt += "<style>\n";
-    rslt += "th, td { padding-left: 12px; padding-right: 12px; }\n";
-    rslt += "</style>\n";
+    LOGD("getHistoryHTML() buf_size(%d) rec_size(%d) num_buf_recs=%d",STACK_BUF_SIZE,HIST_REC_SIZE,STACK_BUF_SIZE/HIST_REC_SIZE);
 
-    if (m_num_items)
+    SDBackwards_t iter;
+    uint8_t stack_buffer[STACK_BUF_SIZE];
+    iter.chunked        = 1;
+    iter.client_data    = 0;                            // cutoff 0 = all records
+    iter.filename       = history_filename;
+    iter.rec_size       = HIST_REC_SIZE;                     // new 12 bytes
+    iter.record_fxn     = baHistoryCondition;
+    iter.buffer         = stack_buffer;                 // an even multiple of rec_size
+    iter.buf_size       = STACK_BUF_SIZE;
+    iter.dbg_level      = 1;                            // 0..2
+
+    if (!myiot_web_server->startBinaryResponse("text/html", CONTENT_LENGTH_UNKNOWN))
+        return "";
+
+    String text = "<head>\n";
+    text += "<title>";
+    text += bilge_alarm->getName();
+    text += " History =</title>\n";
+    text += "<body>\n";
+    text += "<style>\n";
+    text += "th, td { padding-left: 12px; padding-right: 12px; }\n";
+    text += "</style>\n";
+
+    if (!myiot_web_server->writeBinaryData(text.c_str(),text.length()))
+        return "";
+
+    if (!startSDBackwards(&iter))
     {
-        rslt += "<b>";
-        rslt += String(m_num_items);
-        rslt += " ";
-        rslt +=  bilge_alarm->getName();
-        rslt += " History Items</b><br><br>\n";
-        rslt += "<table border='1' padding='6' style='border-collapse:collapse'>\n";
-        rslt += "<tr><th>num</th><th>time</th><th>dur</th><th>ago</th></th><th>flags</th></tr>\n";
+        const char *msg = "Could not startSDBackwards()";
+        myiot_web_server->writeBinaryData(msg,strlen(msg));
+        return RESPONSE_HANDLED;
+    }
 
-        int count = 0;
-        for (int i=0; i<m_num_items; i++)
+    int num_recs;
+    const historyRec_t *base_rec = (const historyRec_t *) getSDBackwards(&iter,&num_recs);
+    if (num_recs)
+    {
+        text = "";
+        text += "<b>";
+        text +=  bilge_alarm->getName();
+        text += " History Items</b><br><br>\n";
+        text += "<table border='1' padding='6' style='border-collapse:collapse'>\n";
+        text += "<tr><th>num</th><th>time</th><th>dur</th><th>ago</th></th><th>flags</th></tr>\n";
+        if (!myiot_web_server->writeBinaryData(text.c_str(),text.length()))
         {
-             count++;
-             const historyItem_t *ptr = getItem(i);
+            if (iter.file)
+                iter.file.close();
+            return "";
+        }
+    }
 
-            rslt += "<tr><td>";
-            rslt += String(count);
-            rslt += "  (";
-            rslt += String(i);
-            rslt += ")";
-            rslt += "</td><td>";
-            rslt += timeToString(ptr->tm);
-            rslt += "</td><td align='center'>";
-            rslt += String(ptr->dur);
-            rslt += "</td><td>";
+    int count = 0;
+    while (num_recs)
+    {
+        text = "";
+        for (int i=num_recs-1; i>=0; i--)
+        {
+            const historyRec_t *rec = &base_rec[i];
+
+            count++;
+
+            text += "<tr><td>";
+            text += String(count);
+            text += "</td><td>";
+            text += timeToString(rec->tm);
+            text += "</td><td align='center'>";
+            text += String(rec->dur);
+            text += "</td><td>";
 
             // anything over a 5 years year is considered invalid to deal with potential lack of clock issues
 
             char buf[128] = "&nbsp;";
-            uint32_t since = time(NULL) - ptr->tm;
+            uint32_t since = time(NULL) - rec->tm;
             if (since < 5 * 365 * 24 * 60 * 60)
             {
                 int days = since / (24 * 60 * 60);
@@ -281,26 +408,52 @@ String baHistory::getHistoryHTML() const
                     sprintf(buf,"%02d:%02d:%02d",hours, minutes, secs);
                 }
             }
-            rslt += buf;
+            text += buf;
 
-            rslt += "</td><td align='center'>";
+            text += "</td><td align='center'>";
 
-            if (ptr->flags & STATE_EMERGENCY) rslt += "EMERGENCY ";
-            if (ptr->flags & STATE_CRITICAL_TOO_LONG) rslt += "WAY TOO LONG ";
-            else if (ptr->flags & STATE_TOO_LONG) rslt += "TOO LONG ";
-            if (ptr->flags & STATE_TOO_OFTEN_HOUR) rslt += "TOO OFTEN ";
-            if (ptr->flags & STATE_TOO_OFTEN_DAY) rslt += "TOO OFTEN DAY";
-            rslt += "</td></tr>\n";
+            if (rec->flags & HIST_STATE_EMERGENCY) text += "EMERGENCY ";
+            if (rec->flags & HIST_STATE_CRITICAL_TOO_LONG) text += "WAY TOO LONG ";
+            else if (rec->flags & HIST_STATE_TOO_LONG) text += "TOO LONG ";
+            if (rec->flags & HIST_STATE_TOO_OFTEN_HOUR) text += "TOO OFTEN ";
+            if (rec->flags & HIST_STATE_TOO_OFTEN_DAY) text += "TOO OFTEN DAY";
+            text += "</td></tr>\n";
 
-        }   // for each item
+        }   // for each record backwards
 
-        rslt += "</table>";
+        if (!myiot_web_server->writeBinaryData(text.c_str(),text.length()))
+        {
+            if (iter.file)
+                iter.file.close();
+            return "";
+        }
+
+        base_rec = (const historyRec_t *) getSDBackwards(&iter,&num_recs);
+    }
+
+    if (count)
+    {
+        text = "</table>";
     }
     else
     {
-        rslt += "THERE IS NO HISTORY OF PUMP RUNS AT THIS TIME\n";
+        text = "THERE IS NO HISTORY OF PUMP RUNS AT THIS TIME\n";
     }
 
-    rslt += "</body>\n";
-    return rslt;
+    text += "</body>\n";
+    if (!myiot_web_server->writeBinaryData(text.c_str(),text.length()))
+    {
+        if (iter.file)
+            iter.file.close();
+        return "";
+    }
+
+    if (iter.file)
+        iter.file.close();
+
+    myiot_web_server->finishBinaryResponse();
+    LOGD("getHistoryHTML() sent %d records",count);
+    return RESPONSE_HANDLED;
 }
+
+

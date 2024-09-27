@@ -16,10 +16,10 @@
 #define DEBUG_DEBOUNCE 1
     // set this to 1 to show debuging of debouncing
 
-
-#define BUTTON_CHECK_TIME  30
-#define UI_UPDATE_TIME     30
-
+#define BUTTON_CHECK_TIME  30       // millis
+#define UI_UPDATE_TIME     30       // millis
+#define COUNT_RUNS_TIME    120      // seconds
+    // check for runs falling off once per minute
 
 //--------------------------------
 // bilgeAlarm definition
@@ -164,8 +164,8 @@ const valDescriptor bilgeAlarm::m_bilge_values[] =
     { ID_DISABLED,         VALUE_TYPE_ENUM,     VALUE_STORE_PREF,     VALUE_STYLE_NONE,       (void *) &_disabled,       (void *) onDisabled,  { .enum_range = { 0, disabledStates }} },
     { ID_ERR_RUN_TIME,     VALUE_TYPE_INT,      VALUE_STORE_PREF,     VALUE_STYLE_OFF_ZERO,   (void *) &_err_run_time,   NULL,  { .int_range = { DEFAULT_ERR_RUN_TIME,      0,  3600}}  },
     { ID_CRIT_RUN_TIME,    VALUE_TYPE_INT,      VALUE_STORE_PREF,     VALUE_STYLE_OFF_ZERO,   (void *) &_crit_run_time,  NULL,  { .int_range = { DEFAULT_CRIT_RUN_TIME,     0,  3600}}  },
-    { ID_ERR_PER_HOUR,     VALUE_TYPE_INT,      VALUE_STORE_PREF,     VALUE_STYLE_OFF_ZERO,   (void *) &_err_per_hour,   NULL,  { .int_range = { DEFAULT_ERR_PER_HOUR,      0,  MAX_RUN_HISTORY-1}}   },
-    { ID_ERR_PER_DAY,      VALUE_TYPE_INT,      VALUE_STORE_PREF,     VALUE_STYLE_OFF_ZERO,   (void *) &_err_per_day,    NULL,  { .int_range = { DEFAULT_ERR_PER_DAY,       0,  MAX_RUN_HISTORY-1}}   },
+    { ID_ERR_PER_HOUR,     VALUE_TYPE_INT,      VALUE_STORE_PREF,     VALUE_STYLE_OFF_ZERO,   (void *) &_err_per_hour,   NULL,  { .int_range = { DEFAULT_ERR_PER_HOUR,      0,  100 }}  },
+    { ID_ERR_PER_DAY,      VALUE_TYPE_INT,      VALUE_STORE_PREF,     VALUE_STYLE_OFF_ZERO,   (void *) &_err_per_day,    NULL,  { .int_range = { DEFAULT_ERR_PER_DAY,       0,  1000}}  },
     { ID_RUN_EMERGENCY,    VALUE_TYPE_INT,      VALUE_STORE_PREF,     VALUE_STYLE_OFF_ZERO,   (void *) &_run_emergency,  NULL,  { .int_range = { DEFAULT_RUN_EMERGENCY,     0,  3600}}  },
     { ID_EXTRA_RUN_TIME,   VALUE_TYPE_INT,      VALUE_STORE_PREF,     VALUE_STYLE_OFF_ZERO,   (void *) &_extra_run_time, NULL,  { .int_range = { DEFAULT_EXTRA_RUN_TIME,    0,  3600}}  },
     { ID_EXTRA_RUN_MODE,   VALUE_TYPE_ENUM,     VALUE_STORE_PREF,     VALUE_STYLE_NONE,       (void *) &_extra_run_mode, NULL,  { .enum_range = { 0, pumpExtraType }} },
@@ -267,6 +267,7 @@ bilgeAlarm *bilge_alarm = NULL;
 
 static uint32_t run_started = 0;
 static uint16_t run_flags = 0;
+static time_t last_count_check = 0;
 
 
 
@@ -329,16 +330,8 @@ void bilgeAlarm::setup()
     // init history
 
     ba_history.initHistory();
-    const historyItem_t *hist = ba_history.getItem(0);
-    if (hist)
-    {
-        LOGD("initializing last_run to %s dur %d",timeToString(hist->tm).c_str(),hist->dur);
-        _time_last_run = hist->tm;
-        _since_last_run = (int32_t) hist->tm;
-        _dur_last_run = hist->dur;
+    last_count_check = time(NULL);
 
-        ba_history.countRuns(0,&_num_last_hour,&_num_last_day,&_num_last_week);
-    }
 
     _history_link = "<a href='/custom/getHistory?uuid=";
     _history_link += getUUID();
@@ -645,7 +638,7 @@ bool bilgeAlarm::debounceSwitch(int pump_num, uint32_t now, int pin, bool was_on
         {
             *p_debounce_time = now + _pump_debounce;
             #if DEBUG_DEBOUNCE
-                LOGD("debounce pump%d: now(%d) + _pump_debounce(%d) = %d",pump_num,now,_pump_debounce,*p_debounce_time);
+                LOGD("debounce pump%d: raw(%d) now(%d) + _pump_debounce(%d) = %d",pump_num,raw,now,_pump_debounce,*p_debounce_time);
             #endif
             return was_on;
         }
@@ -682,8 +675,14 @@ void bilgeAlarm::stateMachine()
     // due to timing delay, but as important, the LCD wont work if we do any setXXX() value
     // changes from here and this happens to be running on Core 0 ...
 {
-    uint32_t now = millis();
     time_t time_now = time(NULL);
+    if (time_now - last_count_check > COUNT_RUNS_TIME)
+    {
+        last_count_check = time_now;
+        ba_history.countRuns(0);
+    }
+
+    uint32_t now = millis();
 
     uint32_t save_state = _state;
     bool was_on1 = _state & STATE_PUMP1_ON;
@@ -752,7 +751,7 @@ void bilgeAlarm::stateMachine()
             }
 
             setState(new_state);
-            run_flags |= STATE_EMERGENCY;
+            run_flags |= HIST_STATE_EMERGENCY;
         }
         else
         {
@@ -827,7 +826,7 @@ void bilgeAlarm::stateMachine()
     {
         if (_err_run_time && _dur_last_run > _err_run_time)
         {
-            run_flags |= STATE_TOO_LONG;
+            run_flags |= HIST_STATE_TOO_LONG;
             if (_disabled != ALARM_DISABLED && !(_state & STATE_TOO_LONG))
             {
                 LOGU("ALARM - PUMP TOO LONG");
@@ -837,7 +836,7 @@ void bilgeAlarm::stateMachine()
         }
         if (_crit_run_time && _dur_last_run > _crit_run_time)
         {
-            run_flags |= STATE_CRITICAL_TOO_LONG;
+            run_flags |= HIST_STATE_CRITICAL_TOO_LONG;
             if (_disabled != ALARM_DISABLED && !(_state & STATE_CRITICAL_TOO_LONG))
             {
                 LOGU("ALARM - PUMP CRITICAL TOO LONG");
@@ -912,12 +911,12 @@ void bilgeAlarm::stateMachine()
 
         // count based alarms
 
-        ba_history.countRuns(1,&_num_last_hour,&_num_last_day,&_num_last_week);
+        ba_history.countRuns(1);
 
         if (!(_state & STATE_TOO_OFTEN_HOUR) &&
             _err_per_hour && _num_last_hour >= _err_per_hour)
          {
-             run_flags |= STATE_TOO_OFTEN_HOUR;
+             run_flags |= HIST_STATE_TOO_OFTEN_HOUR;
              if (_disabled != ALARM_DISABLED)
              {
                  LOGU("ALARM - TOO MANY PER HOUR");

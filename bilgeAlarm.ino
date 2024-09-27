@@ -20,7 +20,7 @@ void setup()
 {
     initPixels();
 
-    Serial.begin(115200);
+    Serial.begin(MY_IOT_ESP32_CORE == 3 ? 115200 : 921600);
     delay(1000);
 
     bilgeAlarm::setDeviceType(BILGE_ALARM);

@@ -41,10 +41,6 @@ class uiScreen
         int m_backlight;
         uint32_t m_activity_time;
 
-        int m_hist_num;
-        int m_hist_iter;
-        const historyItem_t *m_hist_ptr;
-
         // following inited on BASE_SCREEN
 
         int m_value_num;

@@ -27,10 +27,8 @@
 // A long click of the MIDDLE button in MAIN_MODE goes to HISTORY_MODE
 //
 // A short click of the LEFT button cycles forwards through the screens in the mode (with wrapping)
-// A short click of the RIGHT button confirms, executes commands, or increments values (if there is a value),
-//   and also goes to the next history screen if in HISTORY_MODE
+// A short click of the RIGHT button confirms, executes commands, or increments values (if there is a value)
 // A short click of the MIDDLE button cancels confirms, or decrements values (if it therte is a value)
-//   and also goes to the previous history screen if in HISTORY_MODE
 //
 // A long click of the RIGHT button EXECUTES OR CONFIRMS COMMANDS, auto-increments
 //     values if there is one, or auto-increments the history screen.
@@ -75,8 +73,7 @@
 
 
 #define MENU_MODE_MAIN      0     // main mode - main screen and commands
-#define MENU_MODE_HISTORY   1     // stats mode - cycle through history if any
-#define MENU_MODE_CONFIG    2     // config mode - modify config options
+#define MENU_MODE_CONFIG    1     // config mode - modify config options
 
 
 #define SCREEN_ERROR            0
@@ -96,11 +93,8 @@
 
 #define SCREEN_CONFIRM          12
 
-#define SCREEN_HISTORY_BASE     13
-#define SCREEN_HISTORY          14
-
-#define SCREEN_CONFIG_BASE      15
-#define SCREEN_CONFIG           16
+#define SCREEN_CONFIG_BASE      13
+#define SCREEN_CONFIG           14
 
 
 const char *screens[] = {
@@ -121,11 +115,8 @@ const char *screens[] = {
 
     "CONFIRM",              "%S",                   // 12
 
-    "HISTORY %8d",          "BACK  NEXT  PREV",     // 13
-    "%s %s",                "%-12s %3d",            // 14
-
-    "CONFIG SETTINGS",      "NEXT",                 // 15
-    "%s",                   "%16s",                 // 16
+    "CONFIG SETTINGS",      "NEXT",                 // 13
+    "%s",                   "%16s",                 // 14
 };
 
 
@@ -228,9 +219,6 @@ uiScreen::uiScreen(int *button_pins)
 
     m_backlight = 0;
     m_activity_time = 0;
-
-    m_hist_num = 0;
-    m_hist_ptr = NULL;
 
     m_value_num = 0;
     m_value_count = 0;
@@ -685,14 +673,6 @@ void uiScreen::setScreen(int screen_num)
         else
             ui_buttons->setRepeatMask(6);
     }
-    else if (screen_num >= SCREEN_HISTORY_BASE)
-    {
-        m_menu_mode = MENU_MODE_HISTORY;
-        if (screen_num == SCREEN_HISTORY)
-            ui_buttons->setRepeatMask(6);
-        else
-            ui_buttons->setRepeatMask(0);
-    }
     else
     {
         m_menu_mode = MENU_MODE_MAIN;
@@ -827,42 +807,6 @@ void uiScreen::setScreen(int screen_num)
             break;
         }
 
-        // HISTORY
-
-        case SCREEN_HISTORY_BASE:
-            m_hist_num = 0;
-            m_hist_ptr = 0;
-            print_lcd(0,n0,ba_history.numItems());
-            print_lcd(1,n1);
-            break;
-        case SCREEN_HISTORY:
-            if (m_hist_ptr)
-            {
-                // prioritized string
-                const char *buf = "secs";
-                uint16_t flags = m_hist_ptr->flags;
-                if (flags & STATE_EMERGENCY)                buf = "EMERGENCY";
-                else if (flags & STATE_CRITICAL_TOO_LONG)   buf = "CRIT LONG";
-                else if (flags & STATE_TOO_LONG)            buf = "ERR LONG";
-                else if (flags & STATE_TOO_OFTEN_DAY)       buf = "ERR NUM/DAY";
-                else if (flags & STATE_TOO_OFTEN_HOUR)      buf = "ERR NUM/HOUR";
-
-                char buf1[LCD_BUF_LEN] = "";
-                char buf2[LCD_LINE_LEN] = "";
-
-                struct tm *ts = localtime(&m_hist_ptr->tm);
-                sprintf(buf1,"%d %02d-%02d",m_hist_num,ts->tm_mon+1,ts->tm_mday);
-                bool full_time = LCD_LINE_LEN - strlen(buf1) - 1 >= 8;
-                if (full_time)
-                    sprintf(buf2,"%02d:%02d:%02d",ts->tm_hour,ts->tm_min,ts->tm_sec);
-                else
-                    sprintf(buf2,"%02d:%02d",ts->tm_hour,ts->tm_min);
-
-                print_lcd(0,n0,buf1,buf2);
-                print_lcd(1,n1,buf,m_hist_ptr->dur);
-            }
-            break;
-
 
         // DEFAULT (device or config mode) landing on a new value
 
@@ -996,16 +940,6 @@ bool uiScreen::onButton(int button_num, int event_type)
                 return true;
             }
         }
-        else if (button_num == 1)
-        {
-            if (event_type == BUTTON_TYPE_LONG_CLICK)
-            {
-                setScreen(SCREEN_HISTORY_BASE);
-                return true;
-            }
-            // a middle short click in MAIN_MODE does nothing
-            return true;
-        }
 
         // long OR short presses have same semantic on button2 in main mode
 
@@ -1033,62 +967,6 @@ bool uiScreen::onButton(int button_num, int event_type)
         }
     }
 
-    //-----------------------------------
-    // HISTORY_MODE
-    //-----------------------------------
-
-    else if (m_menu_mode == MENU_MODE_HISTORY)
-    {
-        if (button_num == 0 && event_type == BUTTON_TYPE_LONG_CLICK)
-        {
-            setScreen(SCREEN_MAIN);
-        }
-        else if (button_num == 1)
-        {
-            int num = ba_history.numItems();
-            m_hist_num++;   // one based
-            if (m_hist_num > num)
-            {
-                setScreen(SCREEN_HISTORY_BASE);
-            }
-            else
-            {
-                m_hist_ptr = ba_history.getItem(m_hist_num - 1);
-                setScreen(SCREEN_HISTORY);
-            }
-        }
-        else if (button_num == 0 || button_num == 2)
-        {
-            if (m_screen_num == SCREEN_HISTORY_BASE)
-            {
-                m_hist_num = 1; // one based
-                int num = ba_history.numItems();
-                if (m_hist_num > num)
-                {
-                    setScreen(SCREEN_HISTORY_BASE);
-                }
-                else
-                {
-                    m_hist_ptr = ba_history.getItem(m_hist_num - 1);
-                    setScreen(SCREEN_HISTORY);
-                }
-            }
-            else
-            {
-                if (m_hist_num > 1)
-                {
-                    m_hist_num--;
-                    m_hist_ptr = ba_history.getItem(m_hist_num - 1);
-                    setScreen(SCREEN_HISTORY);
-                }
-                else
-                {
-                    setScreen(SCREEN_HISTORY_BASE);
-                }
-            }
-        }
-        return true;
-    }
 
     //---------------------------
     // CONFIG_MODE

@@ -209,6 +209,8 @@ public:
     static time_t   _day_cutoff;
 
 private:
+    friend class baHistory;
+    
 
     static const valDescriptor m_bilge_values[];
     static bilgeAlarmState_t m_publish_state;
