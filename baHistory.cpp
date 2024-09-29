@@ -16,32 +16,41 @@
 #include <SD.h>
 
 #define DEBUG_COUNT 1
+#define DEBUG_SEND_DATA 1
 
 #define WITH_AUTO_COVERSION  1
 
-#define history_filename "/bilge.datalog"
-    // agrees with myIOTDataLog
+//---------------------------------------------------------------
+// the data_log is naturally associated with the baHistory
+// but is externed to bilgeAlarm.cpp for use in onCustomLink()
 
-typedef struct {    // includes the timestamp
-    uint32_t tm;
-    uint32_t dur;
-    uint32_t flags;
-} historyRec_t;
-
+#define history_filename    "/bilgeAlarm.datalog"
+    // MUST agree with data_log.dataFilename()
 
 #define BASE_BUF_SIZE   512
 #define HIST_REC_SIZE   sizeof(historyRec_t)
 #define STACK_BUF_SIZE  (((BASE_BUF_SIZE + HIST_REC_SIZE-1) / HIST_REC_SIZE) * HIST_REC_SIZE)
+    // 516
+
+
+typedef struct {    // includes the timestamp
+    uint32_t tm;    // which is set by myIOTDataLog::addRecord()
+    uint32_t dur;
+    uint32_t flags;
+} historyRec_t;
+
 
 logColumn_t  bilge_cols[] = {
     {"dur",	    LOG_COL_TYPE_UINT32,	10,	},
     {"flags",	LOG_COL_TYPE_UINT32,	1,	},
 };
 
-
 baHistory ba_history;
-myIOTDataLog data_log("bilge",2,bilge_cols);
+myIOTDataLog data_log("bilgeAlarm",2,bilge_cols);
+    // externed to bilgeAlarm.cpp for use in onCustomLink
 
+
+//----------------------------------
 
 #if WITH_AUTO_COVERSION
 
@@ -131,6 +140,10 @@ myIOTDataLog data_log("bilge",2,bilge_cols);
     }
 #endif  // WITH_CONVERSION
 
+
+//--------------------------------
+// implementation
+//--------------------------------
 
 void baHistory::initHistory()
     // initialize the history from the SD file if it exists
@@ -455,5 +468,238 @@ String baHistory::getHistoryHTML() const
     LOGD("getHistoryHTML() sent %d records",count);
     return RESPONSE_HANDLED;
 }
+
+
+
+//------------------------------------------------------------
+// onCustomLink chart Support
+//------------------------------------------------------------
+// shoehorn what I want to display for the bilgeAlarm chart into
+// what I built to display line charts generally for frigeController.ge.
+//
+// I did a little experimentation with bar charts, but generally
+// think that they are unsuitable; at least as far as I got them
+// to work, they looked ok-ish, but zooming messed up the axes tick stuff.
+
+#define ALT_DATA_FORMAT  1
+
+
+extern void addJsonVal(String &rslt, const char *field, String val, bool quoted, bool comma, bool cr);
+    // in myIOTDataLog.cpp
+
+
+
+String baHistory::getBilgeChartHeader()
+{
+	String rslt = "{\n";
+
+	addJsonVal(rslt,"name","bilgeAlarm",true,true,true);
+	addJsonVal(rslt,"num_cols",String(2),false,true,true);
+    addJsonVal(rslt,"reverse_canvases",String(0),false,true,true);
+#if ALT_DATA_FORMAT
+    addJsonVal(rslt,"alt_data_format",String(1),false,true,true);
+#endif
+
+    // two hardwired uint32_t columns
+    // one for regular runs, and one for errors
+
+	rslt += "\"col\":[\n";
+        rslt += "{";
+        addJsonVal(rslt,"name","runs",true,true,false);
+        addJsonVal(rslt,"type","uint32_t",true,true,false);
+        addJsonVal(rslt,"tick_interval",String(10),	false,false,true);
+        rslt += "},\n";
+
+        rslt += "{";
+        addJsonVal(rslt,"name","errors",true,true,false);
+        addJsonVal(rslt,"type","uint32_t",true,true,false);
+        addJsonVal(rslt,"tick_interval",String(10),	false,false,true);
+        rslt += "}\n";
+	rslt += "]\n";
+
+	rslt += "}";
+
+	#if 0
+		Serial.print("getBilgeChartHeader()=");
+		Serial.println(rslt.c_str());
+	#endif
+
+	return rslt;
+}
+
+
+
+
+
+#if ALT_DATA_FORMAT
+    typedef struct __attribute__ ((packed)) 
+    {
+        uint8_t col_idx;
+        uint8_t err_idx;    // only for the error series
+        uint32_t dt;
+        uint32_t val;
+    } outRecord_t;
+
+    bool sendAltRecord(SDBackwards_t *iter,uint8_t col_idx, uint32_t dt, uint32_t val, uint8_t err_idx=0)
+    {
+        outRecord_t rec;
+        rec.col_idx = col_idx;
+        rec.err_idx = err_idx;
+        rec.dt = dt;
+        rec.val = val;
+        if (!myiot_web_server->writeBinaryData((const char*)&rec, sizeof(outRecord_t)))
+        {
+            if (iter->file)
+                iter->file.close();
+            return false;
+        }
+        return true;
+    }
+
+#else
+    typedef struct
+    {
+        uint32_t dt0;       // the zero point one second before the run
+        uint32_t run0;
+        uint32_t err0;
+
+        uint32_t dt1;       // the start of the run
+        uint32_t run1;      // a function of the duration, currently just assigned
+        uint32_t err1;      // the error level of the run, if any
+
+        uint32_t dt2;       // the end of the run, back to zero
+        uint32_t run2;
+        uint32_t err2;
+    } outRecord_t;
+#endif
+
+
+String baHistory::sendBilgeChartData(uint32_t secs)
+    // iterate in backwards chunks, and for each run generate
+    // three data points:
+    //
+    //      ts-1/0              to start the run,
+    //      ts/error_level      for the start
+    //      ts+dur/0            for the end.
+    //
+    // The input dataLog records are 12 bytes and the output
+    // records are 24 bytes each, and we send each one individually.
+{
+	uint32_t cutoff = secs ? time(NULL) - secs : 0;
+
+	#if DEBUG_SEND_DATA
+		String dbg_tm = timeToString(cutoff);
+		LOGI("sendBilgeChartData(%d) since %s from %s",secs,secs?dbg_tm.c_str():"forever",history_filename);
+	#endif
+
+    SDBackwards_t iter;
+    uint8_t stack_buffer[STACK_BUF_SIZE];
+        // 516 holding 43 history records
+    iter.chunked        = 1;
+    iter.client_data    = cutoff;                      // cutoff 0 = all records
+    iter.filename       = history_filename;
+    iter.rec_size       = HIST_REC_SIZE;               // new 12 bytes
+    iter.record_fxn     = baHistoryCondition;
+    iter.buffer         = stack_buffer;                // an even multiple of rec_size
+    iter.buf_size       = STACK_BUF_SIZE;
+    iter.dbg_level      = 1;                           // 0..2
+
+	if (!startSDBackwards(&iter))
+		return "";
+
+    if (!myiot_web_server->startBinaryResponse("application/octet-stream", CONTENT_LENGTH_UNKNOWN))
+		return "";
+
+	int num_file_recs = iter.file ? iter.file.size() / HIST_REC_SIZE : 0;
+    LOGI("num_file_recs(%d)",num_file_recs);
+
+	int sent = 0;
+	int num_recs;
+    #if ALT_DATA_FORMAT
+        LOGD("sizeof(out_record)=%d",sizeof(outRecord_t));
+    #else
+        outRecord_t out_record;
+	#endif
+    uint32_t *in_ptr = (uint32_t *) getSDBackwards(&iter,&num_recs);
+	while (num_recs)
+    {
+        LOGD("processing num_recs(%d)",num_recs);
+
+        for (int i=0; i<num_recs; i++)
+        {
+            uint32_t dt = *in_ptr++;
+            uint32_t dur = *in_ptr++;
+            uint32_t flag = *in_ptr++;
+
+            LOGD("    got(%d) run(%d,%s,%d,%d)",i,dt,timeToString(dt).c_str(),dur,flag);
+
+            #if ALT_DATA_FORMAT
+
+                uint32_t err = 0;
+                if (flag & HIST_STATE_EMERGENCY)
+                    err = 5;
+                else if (flag & HIST_STATE_CRITICAL_TOO_LONG)
+                    err = 4;
+                else if (flag & HIST_STATE_TOO_LONG)
+                    err = 3;
+                else if (flag & HIST_STATE_TOO_OFTEN_DAY)
+                    err = 2;
+                else if (flag & HIST_STATE_TOO_OFTEN_HOUR)
+                    err = 1;
+
+                // with suitable jury rigging of iotChart.js series options
+                // this will put a marker on each run that has an error.
+                // Now I would like to figure out how to mouse over the
+                // marker and display the type of error, perhaps in a third series?
+
+                if (!sendAltRecord(&iter,0,dt-1,0) ||
+                    !sendAltRecord(&iter,0,dt,dur) ||
+                    !sendAltRecord(&iter,0,dt+dur,0))
+                    return "";
+
+                if (flag && !sendAltRecord(&iter,1,dt,dur,err))
+                    return "";
+
+            #else
+
+                uint32_t err = 0;
+                if (flag & HIST_STATE_EMERGENCY)
+                    err = 50;
+                else if (flag & HIST_STATE_CRITICAL_TOO_LONG)
+                    err = 40;
+                else if (flag & HIST_STATE_TOO_LONG)
+                    err = 30;
+                else if (flag & HIST_STATE_TOO_OFTEN_DAY)
+                    err = 20;
+                else if (flag & HIST_STATE_TOO_OFTEN_HOUR)
+                    err = 10;
+
+                memset(&out_record, 0, sizeof(out_record));
+                out_record.dt0 = dt-1;      // starting zero point
+                out_record.dt1 = dt;        // the point
+                out_record.run1 = dur;
+                out_record.err1 = err;
+                out_record.dt2 = dt + dur;  // ending zero point
+
+                if (!myiot_web_server->writeBinaryData((const char*)&out_record, sizeof(out_record)))
+                {
+                    if (iter.file)
+                        iter.file.close();
+                    return "";
+                }
+            #endif
+
+            sent ++;
+        }
+		in_ptr = (uint32_t *) getSDBackwards(&iter,&num_recs);
+	}
+
+	#if DEBUG_SEND_DATA
+		LOGD("    sendBilgeChartData() sent %d/%d records",sent,num_file_recs);
+	#endif
+
+	return RESPONSE_HANDLED;
+}
+
 
 

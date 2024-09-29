@@ -49,9 +49,14 @@ class baHistory
             // those particular errors.
 
         String getHistoryHTML() const;
+            // returns a displayable webpage with a table of runs
             // called from onCustomLink() returns "" or RESPONSE_HANDLED
 
-
+        String getBilgeChartHeader();
+            // returns a String containing the json used to create a chart
+        String sendBilgeChartData(uint32_t secs);
+            // sends the chart data to the myiot_web_server and returns
+            // RESPONSE_HANDLED. 0 means all.
 
 };  // class baHistory
 
