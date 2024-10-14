@@ -35,9 +35,9 @@ void setup()
     #if INIT_SD_EARLY
         bool sd_ok = 0;
         int init_count = 0;
-        while (!sd_ok && init_count++ < 10)
+        while (!device.hasSD() && init_count++ < 10)
         {
-            sd_ok = bilgeAlarm::initSDCard();
+            bilgeAlarm::initSDCard();
             delay(400);
         }
     #endif
