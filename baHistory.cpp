@@ -15,8 +15,9 @@
 #include <myIOTWebServer.h>
 #include <SD.h>
 
-#define DEBUG_COUNT 1
+#define DEBUG_COUNT 0
 #define DEBUG_SEND_DATA 1
+#define ALT_DATA_FORMAT  1
 
 #define WITH_AUTO_COVERSION  1
 
@@ -481,8 +482,6 @@ String baHistory::getHistoryHTML() const
 // think that they are unsuitable; at least as far as I got them
 // to work, they looked ok-ish, but zooming messed up the axes tick stuff.
 
-#define ALT_DATA_FORMAT  1
-
 
 extern void addJsonVal(String &rslt, const char *field, String val, bool quoted, bool comma, bool cr);
     // in myIOTDataLog.cpp
@@ -611,19 +610,25 @@ String baHistory::sendBilgeChartData(uint32_t secs)
 		return "";
 
 	int num_file_recs = iter.file ? iter.file.size() / HIST_REC_SIZE : 0;
-    LOGI("num_file_recs(%d)",num_file_recs);
+    #if DEBUG_SEND_DATA
+        LOGI("num_file_recs(%d)",num_file_recs);
+    #endif
 
 	int sent = 0;
 	int num_recs;
     #if ALT_DATA_FORMAT
-        LOGD("sizeof(out_record)=%d",sizeof(outRecord_t));
+        #if DEBUG_SEND_DATA > 1
+            LOGD("sizeof(out_record)=%d",sizeof(outRecord_t));
+        #endif
     #else
         outRecord_t out_record;
 	#endif
     uint32_t *in_ptr = (uint32_t *) getSDBackwards(&iter,&num_recs);
 	while (num_recs)
     {
-        LOGD("processing num_recs(%d)",num_recs);
+        #if DEBUG_SEND_DATA > 1
+            LOGD("processing num_recs(%d)",num_recs);
+        #endif
 
         for (int i=0; i<num_recs; i++)
         {
@@ -631,7 +636,9 @@ String baHistory::sendBilgeChartData(uint32_t secs)
             uint32_t dur = *in_ptr++;
             uint32_t flag = *in_ptr++;
 
-            LOGD("    got(%d) run(%d,%s,%d,%d)",i,dt,timeToString(dt).c_str(),dur,flag);
+            #if DEBUG_SEND_DATA > 1
+                LOGD("    got(%d) run(%d,%s,%d,%d)",i,dt,timeToString(dt).c_str(),dur,flag);
+            #endif
 
             #if ALT_DATA_FORMAT
 
