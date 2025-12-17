@@ -21,35 +21,6 @@
 #define COUNT_RUNS_TIME    120      // seconds
     // check for runs falling off once per minute
 
-// Widget
-
-#define WITH_WIDGET 1
-
-#if WITH_WIDGET
-
-    #include <myIOTDataLog.h>
-    #include <myIOTWebServer.h>
-
-    myIOTWidget_t bilgeWidget = {
-        "bilgeWidget",
-        "/myIOT/jquery.jqplot.min.css?cache=1,"
-            "/myIOT/jquery.jqplot.min.js?cache=1,"
-            // "/myIOT/jquery.jqplot.js?cache=1,"
-            "/myIOT/jqplot.dateAxisRenderer.js?cache=1,"
-            "/myIOT/jqplot.cursor.js?cache=1,"
-            "/myIOT/jqplot.highlighter.js?cache=1,"
-            "/myIOT/jqplot.legendRenderer.js?cache=1,"
-            // "/myIOT/jqplot.barRenderer.js?cache=1,"
-            "/myIOT/iotChart.js",
-        "doChart('bilgeAlarm')",
-        "stopChart('bilgeAlarm')",
-        NULL };
-
-    extern myIOTDataLog data_log;
-        // in baHistory.cpp
-
-#endif
-
 
 //--------------------------------
 // bilgeAlarm definition
@@ -362,27 +333,9 @@ void bilgeAlarm::setup()
     ba_history.initHistory();
     last_count_check = time(NULL);
 
-#if WITH_WIDGET
-	// on the stack
-	String html = data_log.getChartHTML(
-		300,		// height
-		600,		// width
-		2592000,	// default period for the chart
-		0 );		// default refresh interval
-	#if 0
-		Serial.print("html=");
-		Serial.println(html.c_str());
-	#endif
-
-	// move to the heap
-	bilgeWidget.html = new String(html);
-	setDeviceWidget(&bilgeWidget);
-#endif
-
     _history_link = "<a href='/custom/getHistory?uuid=";
     _history_link += getUUID();
     _history_link += "' target='_blank'>History</a>";
-
 
     // finish bilgeAlarm setup
     //---------------------------------
@@ -1176,52 +1129,10 @@ void bilgeAlarm::loop()
 String bilgeAlarm::onCustomLink(const String &path,  const char **mime_type)
     // called from myIOTHTTP.cpp::handleRequest()
 {
-    // LOGI("bilgeAlarm::onCustomLink(%s)",path.c_str());
-
     if (path.startsWith("getHistory"))
     {
         return ba_history.getHistoryHTML();
     }
-#if WITH_WIDGET
-    else if (path.startsWith("chart_html/bilgeAlarm"))
-    {
-        int height = myiot_web_server->getArg("height",400);
-        int width  = myiot_web_server->getArg("width",800);
-        int period = myiot_web_server->getArg("period",2592000);    // month default
-        int refresh = myiot_web_server->getArg("refresh",0);
-        return data_log.getChartHTML(height,width,period,refresh);
-    }
-
-    #if 1   // overridden dataLog chart methods
-
-        else if (path.startsWith("chart_header/bilgeAlarm"))
-        {
-            *mime_type = "application/json";
-            return ba_history.getBilgeChartHeader();
-        }
-        else if (path.startsWith("chart_data/bilgeAlarm"))
-        {
-            int secs = myiot_web_server->getArg("secs",0);
-            return ba_history.sendBilgeChartData(secs);
-        }
-
-
-    #else   // standard dataLog chart methods
-
-        else if (path.startsWith("chart_header/bilgeAlarm"))
-        {
-            *mime_type = "application/json";
-            return data_log.getChartHeader();
-        }
-        else if (path.startsWith("chart_data/bilgeAlarm"))
-        {
-            int secs = myiot_web_server->getArg("secs",0);
-            return data_log.sendChartData(secs);
-        }
-
-    #endif  // standard dataLog chart methods
-
-#endif  // WITH_WIDGET
 
     return "";
 }
