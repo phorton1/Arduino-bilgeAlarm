@@ -282,7 +282,6 @@ void baHistory::countRuns(int add)
     iter.record_fxn     = baHistoryCondition;
     iter.buffer         = stack_buffer;                 // an even multiple of rec_size
     iter.buf_size       = STACK_BUF_SIZE;
-    iter.dbg_level      = 1;                            // 0..2
 
 	if (!startSDBackwards(&iter))
 		return;
@@ -343,7 +342,6 @@ String baHistory::getHistoryHTML() const
     iter.record_fxn     = baHistoryCondition;
     iter.buffer         = stack_buffer;                 // an even multiple of rec_size
     iter.buf_size       = STACK_BUF_SIZE;
-    iter.dbg_level      = 1;                            // 0..2
 
     if (!myiot_web_server->startBinaryResponse("text/html", CONTENT_LENGTH_UNKNOWN))
         return "";
@@ -601,7 +599,6 @@ String baHistory::sendBilgeChartData(uint32_t secs)
     iter.record_fxn     = baHistoryCondition;
     iter.buffer         = stack_buffer;                // an even multiple of rec_size
     iter.buf_size       = STACK_BUF_SIZE;
-    iter.dbg_level      = 1;                           // 0..2
 
 	if (!startSDBackwards(&iter))
 		return "";
