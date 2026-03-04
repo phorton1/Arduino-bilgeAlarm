@@ -1,25 +1,6 @@
 //------------------------------------
 // baHistory.h
 //------------------------------------
-// 2024-09-27  modified to use myIOTDataLog and one-time
-// conversion of existing run_history.dat to bilge.dataLog
-//
-// bilgeAlarm wants to be able to quickly
-// count the runs for the last hour, day, and week with
-// the quirky notion that it knows if one should be added
-// to all values (if we are in a run that has not yet
-// terminated, so that we can, in fact, set the flags
-// beofre adding the run to the log), coupled with the
-// fact that the bilgeAlarm has _hour_cutoff and _day_cutoff
-// values that it uses to clear errors once they have occurred,
-// and also the old uiScreen assumed it had direct in-memory access
-// to a certain number of records.
-//
-// For the latter, I will just remove the history from the
-// uiScreen ... it was not a viable way to look at the history
-// anyways.
-
-
 
 #pragma once
 
