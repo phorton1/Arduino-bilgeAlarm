@@ -143,17 +143,19 @@ void baHistory::addHistory(uint32_t dur, uint32_t flags)
 
 
 
-bool baHistoryCondition(uint32_t cutoff, uint8_t *rec_ptr)
+SDIterState_t baHistoryCondition(uint32_t cutoff, uint8_t *rec_ptr)
 {
     uint32_t tm = *((uint32_t *)rec_ptr);
+    if (tm == 0)
+        return ITER_SKIP;       // tombstoned record, keep iterating
     if (tm >= cutoff)
-        return true;
+        return ITER_INCLUDE;
     #if 0
         String dt1 = timeToString(tm);
         String dt2 = timeToString(cutoff);
-        LOGD("baHistoryCondition(FALSE) at %s < %s",dt1.c_str(),dt2.c_str());
+        LOGD("baHistoryCondition(STOP) at %s < %s",dt1.c_str(),dt2.c_str());
     #endif
-    return false;
+    return ITER_STOP;
 }
 
 

@@ -1121,10 +1121,6 @@ void bilgeAlarm::loop()
 //------------------------------------------------------------
 // onCustomLink
 //------------------------------------------------------------
-// uses methods in baHistory to shoehorn what I want to display
-// for the bilgeAlarm chart into what I built to display line charts
-// generally for frigeController.
-
 
 String bilgeAlarm::onCustomLink(const String &path,  const char **mime_type)
     // called from myIOTHTTP.cpp::handleRequest()
